@@ -24,25 +24,8 @@ class Mod;
 class RangeF;
 class btTriangleMesh;
 class btRigidBody;
+class Light;
 
-
-// TODO: Cleanup, improve and move to own file.
-class Light {
-	public:
-		unsigned int type;		// 1, 2 or 3
-		float x;
-		float y;
-		float z;
-		float diffuse [4];
-		float specular [4];
-
-	public:
-		Light(unsigned int type);
-		~Light();
-
-		void setDiffuse(short r, short g, short b, short a);
-		void setSpecular(short r, short g, short b, short a);
-};
 
 class Map {
 	friend class RenderSDL;
@@ -50,7 +33,6 @@ class Map {
 
 	private:
 		vector<Zone*> zones;
-		vector<Light*> lights;
 		float ambient[3];
 		vector<MapMesh*> meshes;
 		Render * render;

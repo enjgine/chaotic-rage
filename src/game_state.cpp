@@ -12,7 +12,7 @@
 #include <math.h>
 
 #include "rage.h"
-#include "game.h"
+#include "events.h"
 #include "game_engine.h"
 #include "game_settings.h"
 #include "lua/gamelogic.h"
@@ -33,9 +33,11 @@
 #include "render_opengl/hud.h"
 #include "render_opengl/animplay.h"
 #include "render_opengl/assimpmodel.h"
+#include "render_opengl/light.h"
 #include "audio/audio.h"
 #include "net/net_client.h"
 #include "net/net_server.h"
+#include "util/cmdline.h"
 
 #ifdef USE_SPARK
 #include "spark/SPK.h"
@@ -240,6 +242,25 @@ void GameState::addAnimPlay(AnimPlay* play, Entity* e)
 void GameState::remAnimPlay(AnimPlay* play)
 {
 	GEng()->render->remAnimPlay(play);
+}
+
+
+/**
+* Add a light to the renderer
+**/
+void GameState::addLight(Light* light)
+{
+	GEng()->render->addLight(light);
+	this->addDebugPoint(light->x, light->y, light->z);
+}
+
+
+/**
+* Remove a light from the renderer
+**/
+void GameState::remLight(Light* light)
+{
+	GEng()->render->remLight(light);
 }
 
 
@@ -487,6 +508,10 @@ void GameState::gameLoop(Render* render, Audio* audio, NetClient* client)
 		PROFILE_END(render);
 
 		audio->play();
+
+		if (GEng()->cmdline->throttle) {
+			SDL_Delay(1);
+		}
 
 		MAINLOOP_ITER
 	}

@@ -1,7 +1,8 @@
-How to build a Debian package (deb) and uploading it to the Chaotic Rage PPA
+How to build a Debian package (deb) using the git repo as source and uploading
+it to the Chaotic Rage PPA
 
-TODO: Support older Ubuntu releases than 13.10 'Saucy', use 'tools/linux/*.sh'
-TODO: Upload only the (source) diff to ppa
+TODO: Support older Ubuntu LTS releases than 14.04 'Trusty', use 'tools/linux/*.sh'
+TODO: Upload only the source diff to ppa
 
 
 Sources for instructions
@@ -16,7 +17,7 @@ Install necessary packages
 	debhelper dh-make patch cdbs quilt gnupg fakeroot lintian pbuilder piuparts
 
 
-[Optional for local testing] Be able to sign the package
+Set up gpg-key and ssh-key to be able to sign the package
 	Create a launchpad account
 	https://launchpad.net
 
@@ -26,10 +27,15 @@ Install necessary packages
 
 
 Create the source from repo
+	Clone the git repo
+	> git clone git@github.com:TheJosh/chaotic-rage.git
 	Go to the Chaotic Rage source root folder
+	> cd chaotic-rage
 	Create the file 'chaoticrage_<version>.orig.tar.xz'
 	> make dist
-	Use the file as source
+	Remove previous PPA updates if any
+	> rm -rf ../deb_build/
+	Use the created file as source
 	> mkdir ../deb_build && \
 	cp chaoticrage_* ../deb_build && \
 	cd ../deb_build && \
@@ -43,12 +49,9 @@ Prepare for building the package
 		> export DEBEMAIL=<email address>
 		> export DEBFULLNAME="Full Name"
 	Update changelog (two alternatives)
-		Do not change version number (edit changelog for unpublished build)
-		> dch --edit
-		Or increase the Debian release number
+		Increase the Debian release number (edit with 'dch --edit')
 		> dch --increment
-		Note: Launchpad rejects the PPA upload if distribution is not a valid
-		target (Ubuntu version), e.g. 'trusty'.
+		Note: Update the target (Ubuntu version) to e.g. 'trusty'.
 
 
 Build package
@@ -75,7 +78,6 @@ Test building locally
 
 Upload to the Chaotic Rage PPA
 	> dput ppa:chaotic-rage/chaoticrage ../<source.changes>
-	Note: one package for each release is required (Ubuntu Saucy and Trusty)
 	
 	Update the repo with the new changelog and any other changes
 	cp -r debian/ ../../chaotic-rage/tools/debian_package/

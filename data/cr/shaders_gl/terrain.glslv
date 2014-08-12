@@ -1,35 +1,44 @@
 #version 130
 
+#define MAX_NUM_LIGHTS 4
+
 in vec3 vPosition;
 in vec3 vNormal;
 in vec2 vTexUV;
 
-out vec2 fTexUV;
-out vec3 fNormal;
-out vec3 fLightDir[2];
+out vec2 TexUV;
 out vec4 fShadowCoord;
 out float fDepth;
+out vec3 csNormal;
+out vec3 wsPosition;
+out vec3 csEyeDirection;
+out vec3 csLightDirection[MAX_NUM_LIGHTS];
 
 uniform mat4 uMVP;
-uniform mat4 uMV;
-uniform mat3 uN;
-uniform vec3 uLightPos[2];
+uniform mat4 uM;
+uniform mat3 uMN;
+uniform mat4 uV;
+uniform vec3 uLightPos[MAX_NUM_LIGHTS];
+uniform vec4 uLightColor[MAX_NUM_LIGHTS];
 uniform mat4 uDepthBiasMVP;
 
 
 void main()
 {
 	gl_Position = uMVP * vec4(vPosition, 1.0f);
-	fTexUV = vTexUV;
-	fNormal = uN * vNormal;
 	
-	vec4 pos4 = uMV * vec4(vPosition, 1.0f);
-	vec3 pos3 = pos4.xyz / pos4.w;
+	wsPosition = (uM * vec4(vPosition, 1.0f)).xyz;
 	
-	for (int i = 0; i < 2; i++) {
-		fLightDir[i] = normalize(uN * uLightPos[i] - pos3);
+	csEyeDirection = vec3(0.0, 0.0, 0.0) - (uV * uM * vec4(vPosition, 1.0f)).xyz;
+	
+	for (int i = 0; i < MAX_NUM_LIGHTS; ++i) {
+		vec3 csLightPos = (uV * vec4(uLightPos[i], 1.0f)).xyz;
+		csLightDirection[i] = csLightPos + csEyeDirection;
 	}
-
+	
+	csNormal = (mat3(uV) * uMN * vNormal).xyz;
+	
+	TexUV = vTexUV;
 	fShadowCoord = uDepthBiasMVP * vec4(vPosition, 1.0f);
 	fDepth = gl_Position.z / 350f;	// TODO: Dont hard-code with far plane distance, use a uniform!
 }

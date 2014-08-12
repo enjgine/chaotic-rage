@@ -24,15 +24,17 @@
 #include "../map/map.h"
 #include "../map/heightmap.h"
 #include "../map/mesh.h"
+#include "../render/sprite.h"
+
 #include "render_opengl.h"
 #include "render_opengl_settings.h"
 #include "gl_debug.h"
 #include "gl_debug_drawer.h"
 #include "glvao.h"
-#include "../render/sprite.h"
 #include "glshader.h"
 #include "assimpmodel.h"
 #include "animplay.h"
+#include "light.h"
 #include "hud.h"
 
 #include <guichan.hpp>
@@ -95,7 +97,8 @@ RenderOpenGL::RenderOpenGL(GameState* st, RenderOpenGLSettings* settings) : Rend
 	this->settings = NULL;
 	this->setSettings(settings);
 
-	shaders_loaded = false;
+	this->lights_changed = false;
+	this->shaders_loaded = false;
 }
 
 
@@ -1081,33 +1084,33 @@ void RenderOpenGL::setupShaders()
 {
 	// Prep point lights...
 	// TODO: Think about dynamic lights?
-	glm::vec3 LightPos[2];
-	glm::vec4 LightColor[2];
+	glm::vec3 LightPos[4];
+	glm::vec4 LightColor[4];
 	unsigned int idx = 0;
-	for (unsigned int i = 0; i < st->map->lights.size(); i++) {
-		Light * l = st->map->lights[i];
+	for (unsigned int i = 0; i < this->lights.size(); i++) {
+		Light * l = this->lights[i];
 
 		if (l->type == 3) {
 			LightPos[idx] = glm::vec3(l->x, l->y, l->z);
-			LightColor[idx] = glm::vec4(l->diffuse[0], l->diffuse[1], l->diffuse[2], 0.8f);
+			LightColor[idx] = glm::vec4(l->diffuse[0], l->diffuse[1], l->diffuse[2], l->diffuse[3]);
 			idx++;
-			if (idx == 2) break;
+			if (idx == 4) break;
 		}
 	}
-
+	
 	// ...and ambient too
 	glm::vec4 AmbientColor(this->st->map->ambient[0], this->st->map->ambient[1], this->st->map->ambient[2], 1.0f);
 
 	// Assign to phong shader
 	glUseProgram(this->shaders[SHADER_ENTITY_STATIC]->p());
-	glUniform3fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uLightPos"), 2, glm::value_ptr(LightPos[0]));
-	glUniform4fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uLightColor"), 2, glm::value_ptr(LightColor[0]));
+	glUniform3fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uLightPos"), idx, glm::value_ptr(LightPos[0]));
+	glUniform4fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uLightColor"), idx, glm::value_ptr(LightColor[0]));
 	glUniform4fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uAmbient"), 1, glm::value_ptr(AmbientColor));
 
 	// And terrain
 	glUseProgram(this->shaders[SHADER_TERRAIN]->p());
-	glUniform3fv(this->shaders[SHADER_TERRAIN]->uniform("uLightPos"), 2, glm::value_ptr(LightPos[0]));
-	glUniform4fv(this->shaders[SHADER_TERRAIN]->uniform("uLightColor"), 2, glm::value_ptr(LightColor[0]));
+	glUniform3fv(this->shaders[SHADER_TERRAIN]->uniform("uLightPos"), idx, glm::value_ptr(LightPos[0]));
+	glUniform4fv(this->shaders[SHADER_TERRAIN]->uniform("uLightColor"), idx, glm::value_ptr(LightColor[0]));
 	glUniform4fv(this->shaders[SHADER_TERRAIN]->uniform("uAmbient"), 1, glm::value_ptr(AmbientColor));
 
 	CHECK_OPENGL_ERROR;
@@ -1545,7 +1548,7 @@ void RenderOpenGL::addAnimPlay(AnimPlay* play, Entity* e)
 
 
 /**
-* Only temporay until we move the modelmatrix stuff out into the AnimPlay class
+* Only temporary until we move the modelmatrix stuff into the AnimPlay class
 **/
 class DeleteIfPlay
 {
@@ -1666,7 +1669,8 @@ void RenderOpenGL::recursiveRenderAssimpModelStatic(AnimPlay* ap, AssimpModel* a
 	// Set uniforms
 	glUniformMatrix4fv(shader->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(MVP));
 	glUniformMatrix4fv(shader->uniform("uM"), 1, GL_FALSE, glm::value_ptr(transform));
-
+	glUniformMatrix3fv(shader->uniform("uMN"), 1, GL_FALSE, glm::value_ptr(glm::inverseTranspose(glm::mat3(transform))));
+	
 	// Render meshes
 	for (vector<unsigned int>::iterator it = nd->meshes.begin(); it != nd->meshes.end(); ++it) {
 		AssimpMesh* mesh = am->meshes[(*it)];
@@ -1722,6 +1726,26 @@ void RenderOpenGL::recursiveRenderAssimpModelBones(AnimPlay* ap, AssimpModel* am
 
 
 /**
+* Add a light
+**/
+void RenderOpenGL::addLight(Light* light)
+{
+	this->lights.push_back(light);
+	this->lights_changed = true;
+}
+
+
+/**
+* Remove a light
+**/
+void RenderOpenGL::remLight(Light* light)
+{
+	this->lights.erase(std::remove(this->lights.begin(), this->lights.end(), light), this->lights.end());
+	this->lights_changed = true;
+}
+
+
+/**
 * Draws text
 *
 * Note that the Y is for the baseline of the text.
@@ -1749,7 +1773,10 @@ void RenderOpenGL::render()
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	CHECK_OPENGL_ERROR;
+	if (this->lights_changed) {
+		this->setupShaders();
+		this->lights_changed = false;
+	}
 
 	entitiesShadowMap();
 
@@ -2038,15 +2065,12 @@ void RenderOpenGL::terrain()
 		modelMatrix = glm::translate(modelMatrix, heightmap->getPosition());
 
 		glm::mat4 MVP = this->projection * this->view * modelMatrix;
-		glUniformMatrix4fv(s->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(MVP));
-
-		glm::mat4 MV = this->view * modelMatrix;
-		glUniformMatrix4fv(s->uniform("uMV"), 1, GL_FALSE, glm::value_ptr(MV));
-
-		glm::mat3 N = glm::inverseTranspose(glm::mat3(MV));
-		glUniformMatrix3fv(s->uniform("uN"), 1, GL_FALSE, glm::value_ptr(N));
-
 		glm::mat4 depthBiasMVP = biasMatrix * this->depthmvp * modelMatrix;
+		
+		glUniformMatrix4fv(s->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(MVP));
+		glUniformMatrix4fv(s->uniform("uM"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
+		glUniformMatrix3fv(s->uniform("uMN"), 1, GL_FALSE, glm::value_ptr(glm::inverseTranspose(glm::mat3(modelMatrix))));
+		glUniformMatrix4fv(s->uniform("uV"), 1, GL_FALSE, glm::value_ptr(this->view));
 		glUniformMatrix4fv(s->uniform("uDepthBiasMVP"), 1, GL_FALSE, glm::value_ptr(depthBiasMVP));
 
 		heightmap->glvao->bind();
@@ -2062,13 +2086,10 @@ void RenderOpenGL::terrain()
 		MapMesh* mm = (*it);
 
 		glm::mat4 MVP = this->projection * this->view * mm->xform;
-		glm::mat4 MV = this->view * mm->xform;
-		glm::mat3 N = glm::inverseTranspose(glm::mat3(MV));
 		glm::mat4 depthBiasMVP = biasMatrix * this->depthmvp * mm->xform;
 
 		glUniformMatrix4fv(s->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(MVP));
-		glUniformMatrix4fv(s->uniform("uMV"), 1, GL_FALSE, glm::value_ptr(MV));
-		glUniformMatrix3fv(s->uniform("uN"), 1, GL_FALSE, glm::value_ptr(N));
+		glUniformMatrix4fv(s->uniform("uV"), 1, GL_FALSE, glm::value_ptr(this->view));
 		glUniformMatrix4fv(s->uniform("uDepthBiasMVP"), 1, GL_FALSE, glm::value_ptr(depthBiasMVP));
 
 		recursiveRenderAssimpModelStatic(mm->play, mm->model, mm->model->rootNode, s, mm->xform);

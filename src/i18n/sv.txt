@@ -1,0 +1,37 @@
+#
+# Swedish
+#
+
+# Main menu
+MENU_CAMPAIGN     Kampanj
+MENU_SINGLE       Singelspel
+MENU_SPLIT        Delad skärm
+MENU_NETWORK      Nätverksspel
+MENU_SETTINGS     Inställningar
+MENU_MODS         Moddar
+MENU_HELP         Hjälp
+MENU_QUIT         Avsluta
+
+# New game menu
+NEWGAME_TYPE             Speltyp
+NEWGAME_WEAPONS          Vapen
+NEWGAME_MAP              Karta
+NEWGAME_UNIT             Karaktär
+NEWGAME_VIEW             Kameraläge
+NEWGAME_HOST             Var värd för nätverksspel
+NEWGAME_START_SINGLE     Starta singelspel
+NEWGAME_START_SPLIT      Starta spel med delad skärm
+NEWGAME_START_CAMPAIGN   Starta kampanj
+
+# Weapon menu
+WEAPONS_STANDARD_UNIT    Standardvapen för karaktär
+WEAPONS_STANDARD_GAME    Standardvapen för speltyp
+WEAPONS_SAVE             Spara val av vapen
+
+# Network menu
+NETWORK_DIRECT           Direkt
+NETWORK_LOCAL            Lokalt
+NETWORK_INTERNET         Internet
+NETWORK_HOSTNAME         Värdnamn
+NETWORK_REFRESH_LIST     Ladda om lista
+NETWORK_JOIN_GAME        Anslut till spel

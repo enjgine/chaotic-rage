@@ -43,9 +43,9 @@ MapMesh::~MapMesh()
 btRigidBody* MapMesh::createRigidBody()
 {
 	// Prepare the triangle mesh shape
-	this->trimesh = new btTriangleMesh(false, false);
-	this->fillTriangeMesh(trimesh, this->play, this->model, this->model->rootNode);
-	this->colshape = new btBvhTriangleMeshShape(trimesh, true, true);
+	this->trimesh = new btTriangleIndexVertexArray();
+	this->fillTriangeMesh(this->model->rootNode);
+	this->colshape = new btBvhTriangleMeshShape(this->trimesh, true, true);
 
 	// Prepare body
 	btTransform xform;
@@ -69,36 +69,32 @@ btRigidBody* MapMesh::createRigidBody()
 
 /**
 * Fill a triangle mesh with triangles
-*
-* TODO: It would be better to use btTriangleIndexVertexArray or make AssimpModel implement btStridingMeshInterface
 **/
-void MapMesh::fillTriangeMesh(btTriangleMesh* trimesh, AnimPlay *ap, AssimpModel *am, AssimpNode *nd)
+void MapMesh::fillTriangeMesh(AssimpNode *nd)
 {
-	glm::mat4 transform;
-	glm::vec4 a, b, c;
-	AssimpMesh* mesh;
-
-	// Grab the transform for this node
-	std::map<AssimpNode*, glm::mat4>::iterator local = ap->transforms.find(nd);
-	assert(local != ap->transforms.end());
-	transform = local->second;
+	AssimpMesh* asMesh;
+	btIndexedMesh btMesh;
 
 	// Iterate the meshes and add triangles
 	for (vector<unsigned int>::iterator it = nd->meshes.begin(); it != nd->meshes.end(); ++it) {
-		mesh = am->meshes[(*it)];
+		asMesh = this->model->meshes[(*it)];
 
-		for (vector<AssimpFace>::iterator itt = mesh->faces->begin(); itt != mesh->faces->end(); ++itt) {
-			a = transform * mesh->verticies->at((*itt).a);
-			b = transform * mesh->verticies->at((*itt).b);
-			c = transform * mesh->verticies->at((*itt).c);
+		btMesh.m_numTriangles = asMesh->faces->size();
+		btMesh.m_triangleIndexBase = (const unsigned char*) &asMesh->faces->at(0);
+		btMesh.m_triangleIndexStride = sizeof(AssimpFace);
+		btMesh.m_indexType = PHY_INTEGER;
 
-			trimesh->addTriangle(btVector3(a.x, a.y, a.z), btVector3(b.x, b.y, b.z), btVector3(c.x, c.y, c.z));
-		}
+		btMesh.m_numVertices = asMesh->verticies->size();
+		btMesh.m_vertexBase = (const unsigned char*) &asMesh->verticies->at(0);
+		btMesh.m_vertexStride = sizeof(glm::vec4);
+		btMesh.m_vertexType = PHY_FLOAT;
+
+		this->trimesh->addIndexedMesh(btMesh);
 	}
 
 	// Iterate children nodes
 	for (vector<AssimpNode*>::iterator it = nd->children.begin(); it != nd->children.end(); ++it) {
-		fillTriangeMesh(trimesh, ap, am, (*it));
+		this->fillTriangeMesh(*it);
 	}
 }
 

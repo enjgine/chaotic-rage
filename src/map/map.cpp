@@ -21,6 +21,7 @@
 #include "../mod/confuse_types.h"
 #include "../physics_bullet.h"
 #include "../render_opengl/animplay.h"
+#include "../render_opengl/light.h"
 #include "../render/sprite.h"
 #include "../render/render_3d.h"
 #include "../mod/mod.h"
@@ -180,34 +181,6 @@ static cfg_opt_t opts[] =
 
 	CFG_END()
 };
-
-Light::Light(unsigned int type)
-{
-	this->type = type;
-	this->x = this->y = this->z = 0.0f;
-	this->diffuse[0] = this->diffuse[1] = this->diffuse[2] = this->diffuse[3] = 0.0;
-	this->specular[0] = this->specular[1] = this->specular[2] = this->specular[3] = 0.0;
-}
-
-Light::~Light()
-{
-}
-
-void Light::setDiffuse(short r, short g, short b, short a)
-{
-	this->diffuse[0] = r / 255.0f;
-	this->diffuse[1] = g / 255.0f;
-	this->diffuse[2] = b / 255.0f;
-	this->diffuse[3] = a / 255.0f;
-}
-
-void Light::setSpecular(short r, short g, short b, short a)
-{
-	this->specular[0] = r / 255.0f;
-	this->specular[1] = g / 255.0f;
-	this->specular[2] = b / 255.0f;
-	this->specular[3] = a / 255.0f;
-}
 
 
 Map::Map(GameState * st)
@@ -419,7 +392,7 @@ int Map::load(string name, Render *render, Mod* insideof)
 		if (model == NULL) continue;
 
 		// TODO: Fix for dedicated server (no Render3D)
-		if (! model->load(static_cast<Render3D*>(this->render), true)) {
+		if (! model->load(static_cast<Render3D*>(this->render), true, AssimpLoadMapMesh)) {
 			cerr << "Map model " << tmp << " failed to load.\n";
 			cfg_free(cfg);
 			return 0;
@@ -438,43 +411,6 @@ int Map::load(string name, Render *render, Mod* insideof)
 		MapMesh* m = new MapMesh(xform, model);
 		this->meshes.push_back(m);
 	}
-
-	// Lights
-	num_types = cfg_size(cfg, "light");
-	for (j = 0; j < num_types; j++) {
-		int num;
-
-		cfg_sub = cfg_getnsec(cfg, "light", j);
-
-		Light * l = new Light(cfg_getint(cfg_sub, "type"));
-
-		l->x = (float)cfg_getfloat(cfg_sub, "x");
-		l->y = (float)cfg_getfloat(cfg_sub, "y");
-		l->z = (float)cfg_getfloat(cfg_sub, "z");
-
-		num = cfg_size(cfg_sub, "diffuse");
-		if (num == 4) {
-			l->setDiffuse(
-				(short)cfg_getnint(cfg_sub, "diffuse", 0),
-				(short)cfg_getnint(cfg_sub, "diffuse", 1),
-				(short)cfg_getnint(cfg_sub, "diffuse", 2),
-				(short)cfg_getnint(cfg_sub, "diffuse", 3)
-			);
-		}
-
-		num = cfg_size(cfg_sub, "specular");
-		if (num == 4) {
-			l->setSpecular(
-				(short)cfg_getnint(cfg_sub, "specular", 0),
-				(short)cfg_getnint(cfg_sub, "specular", 1),
-				(short)cfg_getnint(cfg_sub, "specular", 2),
-				(short)cfg_getnint(cfg_sub, "specular", 3)
-			);
-		}
-
-		this->lights.push_back(l);
-	}
-
 
 	cfg_free(cfg);
 	return 1;
@@ -595,6 +531,42 @@ void Map::loadDefaultEntities()
 		this->st->addPickup(pu);
 	}
 
+	// Lights
+	num_types = cfg_size(cfg, "light");
+	for (j = 0; j < num_types; j++) {
+		int num;
+
+		cfg_sub = cfg_getnsec(cfg, "light", j);
+
+		Light * l = new Light(cfg_getint(cfg_sub, "type"));
+
+		l->x = (float)cfg_getfloat(cfg_sub, "x");
+		l->y = (float)cfg_getfloat(cfg_sub, "y");
+		l->z = (float)cfg_getfloat(cfg_sub, "z");
+
+		num = cfg_size(cfg_sub, "diffuse");
+		if (num == 4) {
+			l->setDiffuse(
+				(short)cfg_getnint(cfg_sub, "diffuse", 0),
+				(short)cfg_getnint(cfg_sub, "diffuse", 1),
+				(short)cfg_getnint(cfg_sub, "diffuse", 2),
+				(short)cfg_getnint(cfg_sub, "diffuse", 3)
+			);
+		}
+
+		num = cfg_size(cfg_sub, "specular");
+		if (num == 4) {
+			l->setSpecular(
+				(short)cfg_getnint(cfg_sub, "specular", 0),
+				(short)cfg_getnint(cfg_sub, "specular", 1),
+				(short)cfg_getnint(cfg_sub, "specular", 2),
+				(short)cfg_getnint(cfg_sub, "specular", 3)
+			);
+		}
+
+		this->st->addLight(l);
+	}
+	
 	cfg_free(cfg);
 }
 
