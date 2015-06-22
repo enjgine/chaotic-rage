@@ -11,6 +11,7 @@
 #include "render/render.h"
 #include "render/render_3d.h"
 #include "audio/audio.h"
+#include "net/net_client.h"
 #include "net/net_server.h"
 #include "util/cmdline.h"
 #include "util/clientconfig.h"
@@ -47,13 +48,19 @@ GameEngine::GameEngine()
 	this->render = NULL;
 	this->audio = NULL;
 	this->server = NULL;
+	this->client = NULL;
 	this->cmdline = NULL;
 	this->cconf = NULL;
 	this->mm = NULL;
+	this->gui_scale = 1.0f;
+
+	this->gui = NULL;
+	this->guiinput = NULL;
+	this->guitop = NULL;
 
 	this->ticksum = 0;
 	this->tickindex = 0;
-	memset(&this->ticklist, 0, sizeof(this->ticklist));
+	memset(&this->ticklist, 0, static_cast<unsigned int>(sizeof(this->ticklist)));
 
 	g_geng = this;
 }
@@ -67,6 +74,7 @@ GameEngine::~GameEngine()
 	delete(this->render);
 	delete(this->audio);
 	delete(this->server);
+	delete(this->client);
 	delete(this->cmdline);
 	delete(this->cconf);
 	delete(this->mm);
@@ -166,9 +174,10 @@ void GameEngine::addDialog(Dialog * dialog)
 	if (this->gui == NULL) return;
 	if (hasDialog(dialog->getName())) return;
 
-	gcn::Container * c = dialog->setup();
+	gcn::Window * c = (gcn::Window*)dialog->setup();
 	c->setPosition((this->render->getWidth() - c->getWidth()) / 2, (this->render->getHeight() - c->getHeight()) / 2);
 	c->setBaseColor(gcn::Color(150, 150, 150, 200));
+	c->setTitleBarHeight(c->getTitleBarHeight() * GEng()->gui_scale);
 	this->guitop->add(c);
 
 	this->dialogs.push_back(dialog);

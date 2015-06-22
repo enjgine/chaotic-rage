@@ -24,6 +24,7 @@ class RenderDebug : public Render
 		SDL_Texture *sprite_object;
 		SDL_Texture *sprite_unit;
 		SDL_Texture *sprite_player;
+		SDL_Texture *bg;
 
 		int width;
 		int height;
@@ -48,7 +49,7 @@ class RenderDebug : public Render
 		virtual ~RenderDebug();
 
 	private:
-		SDL_Texture *loadTexture(const char* filename);
+		SDL_Texture *createSolidTexture(int width, int height, int r, int g, int b, int a);
 		void cleanup();
 };
 

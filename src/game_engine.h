@@ -9,9 +9,6 @@
 
 #include "rage.h"
 
-using namespace std;
-
-
 namespace gcn {
 	class Gui;
 	class SDLInput;
@@ -44,7 +41,7 @@ class GameEngine
 		bool mouse_grabbed;
 
 		// Guichan dialogs
-		list<Dialog*> dialogs;
+		std::list<Dialog*> dialogs;
 
 	public:
 		// Is the game running?
@@ -54,6 +51,7 @@ class GameEngine
 		Render* render;
 		Audio* audio;
 		NetServer* server;
+		NetClient* client;
 		CommandLineArgs* cmdline;
 		ClientConfig* cconf;
 		ModManager* mm;
@@ -62,6 +60,7 @@ class GameEngine
 		gcn::Gui* gui;
 		gcn::SDLInput* guiinput;
 		gcn::Container* guitop;
+		float gui_scale;
 
 	public:
 		GameEngine();

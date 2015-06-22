@@ -9,6 +9,9 @@
 using namespace std;
 
 
+/**
+* Constructor
+**/
 Entity::Entity(GameState *st)
 {
 	this->del = false;
@@ -16,6 +19,10 @@ Entity::Entity(GameState *st)
 	this->body = NULL;
 }
 
+
+/**
+* Destructor
+**/
 Entity::~Entity()
 {
 }
@@ -31,9 +38,9 @@ GameState * Entity::getGameState()
 
 
 /**
-* Has this entity died?
+* Remove the entity from the game world
 **/
-void Entity::hasDied()
+void Entity::remove()
 {
 	this->del = true;
 }
@@ -58,9 +65,18 @@ void Entity::setTransform(btTransform &t)
 
 
 /**
-* Get the current position from the transformation
+* Get the current position from the transformation (by reference)
 **/
 const btVector3& Entity::getPosition() const
+{
+	return this->getTransform().getOrigin();
+}
+
+
+/**
+* Get the current position from the transformation (by value)
+**/
+btVector3 Entity::getPositionByVal() const
 {
 	return this->getTransform().getOrigin();
 }
@@ -84,3 +100,4 @@ void Entity::disableCollision()
 {
 	body->setCollisionFlags(body->getCollisionFlags() | btCollisionObject::CF_NO_CONTACT_RESPONSE);
 }
+

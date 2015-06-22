@@ -8,7 +8,6 @@
 #include <vector>
 #include "../game_state.h"
 #include "../mod/unittype.h"
-#include "../rage.h"
 #include "entity.h"
 
 class AnimPlay;
@@ -87,80 +86,147 @@ class Unit : public Entity
 		Vehicle* drive;
 
 	protected:
+		// Type
 		UnitType* uc;
+
+		// Parameters are copied from the type
+		// Might also be adjusted by powerups
 		UnitParams params;
 
+		// When this reaches zero, the unit dies
 		float health;
-		unsigned int remove_at;
 
-		AnimPlay * anim;
+		// 3D model
+		AnimPlay* anim;
+
+		// Current firing sound
 		int weapon_sound;
 
+		// Countdown until idle sound
+		unsigned int idle_sound_time;
+
+		// Physics bits
 		btPairCachingGhostObject* ghost;
 		btCRKinematicCharacterController* character;
 
+		// The object we're lifting
 		Object* lift_obj;
+
+		// External forces (e.g. black holes)
 		btVector3 force;
 
+		// The current weapon
 		UnitWeapon* weapon;
-		bool firing;
-		vector<UnitWeapon*> avail_weapons;
 		unsigned int curr_weapon_id;
+		unsigned int weapon_zoom_level;
 
+		// Are we firing?
+		bool firing;
+
+		// All of the weapons
+		vector<UnitWeapon*> avail_weapons;
+
+		// How long until we can melee again
 		unsigned int melee_cooldown;
 
+		// Is the special weapon firing?
 		bool special_firing;
+
+		// When will the special be finished?
 		unsigned int special_time;
 		unsigned int special_cooldown;
 
+		// Currently applied pickups
 		list<UnitPickup> pickups;
 
+		// A weapon specified by a powerup
+		WeaponType* powerup_weapon;
+
+		// A message to be shown while the powerup is active
+		string powerup_message;
+
+		// Not active until fully spawned
+		bool active;
+
 	public:
-		Unit(UnitType *uc, GameState *st, float x, float y, float z, Faction fac);
+		Unit(UnitType *ut, GameState *st, Faction fac, float x, float z);
+		Unit(UnitType *ut, GameState *st, Faction fac, float x, float y, float z);
+		Unit(UnitType *ut, GameState *st, Faction fac, btTransform & loc);
+		void init(UnitType *ut, GameState *st, Faction fac, btTransform & loc);
 		virtual ~Unit();
 
 	public:
-		virtual Sound* getSound();
+		// Update every frame
 		virtual void update(int delta);
+
+		// The location and rotation in the universe
 		virtual const btTransform &getTransform() const;
 		virtual void setTransform(btTransform &t);
 
 	public:
+		// Ray tests
 		Entity * infront(float range);
 		Entity * raytest(btMatrix3x3 &direction, float range);
 		bool onground();
 
+		// Traditional weapons
 		void beginFiring();
 		void endFiring();
+
+		// Melee
 		void meleeAttack();
 		void meleeAttack(btMatrix3x3 &direction);
+
+		// Special attack
 		void specialAttack();
 		void endSpecialAttack();
 
+		// Pick up weapons
 		bool pickupWeapon(WeaponType* wt);
 		bool pickupAmmo(WeaponType* wt);
-		unsigned int getNumWeapons();
-		UnitWeapon * getWeaponAt(unsigned int id);
-		WeaponType * getWeaponTypeAt(unsigned int id);
-		WeaponType * getWeaponTypeCurr();
 
-		void setWeapon(int id);
-		unsigned int getCurrentWeaponID();
+		// Weapon list
+		unsigned int getNumWeapons();
+		UnitWeapon* getWeaponAt(unsigned int id);
+		WeaponType* getWeaponTypeAt(unsigned int id);
 		unsigned int getPrevWeaponID();
 		unsigned int getNextWeaponID();
+
+		// Current weapon
+		WeaponType* getWeaponTypeCurr();
+		unsigned int getCurrentWeaponID();
+
+		// Set the weapon
+		void setWeapon(int id);
+		
+		// Ammo and zoom level
 		int getBelt();
 		int getMagazine();
+		float getWeaponZoom();
+		void reload();
 
+		// Health and death
 		float getHealth();
 		float getHealthPercent();
-		virtual int takeDamage(float damage);
+		virtual void takeDamage(float damage);
+		virtual void die();
 
+		// Pickup adjustments (temporary and permanant)
 		void applyPickupAdjust(PickupTypeAdjust* adj);
 		void rollbackPickupAdjust(PickupTypeAdjust* adj);
+		void addActivePickup(PickupType* pt);
+		bool hasActivePickup(PickupType* pt);
+		string getPowerupMessage() { return this->powerup_message; }
+
+		// External forces such as black holes
 		void applyForce(btVector3 &force);
 
+		// The type and parameters
 		UnitType* getUnitType() { return this->uc; }
 		UnitParams* getParams() { return &this->params; }
+
+		// The currently running animation has finished
+		void animationFinished();
 
 	protected:
 		void setState(int new_type);
@@ -168,6 +234,15 @@ class Unit : public Entity
 		void doLift();
 		void doDrop();
 		void emptySound();
+		void walkSound();
 		void enterVehicle(Vehicle *v);
 		void leaveVehicle();
+		void zoomWeapon();
+		void resetIdleTime();
+
+	private:
+		/**
+		* A pickup applied when the unit is first created
+		**/
+		static PickupType* initial_pickup;
 };

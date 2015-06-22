@@ -26,19 +26,11 @@
 // Defines
 #include "RenderingAPIs/OpenGL/SPK_GL_DEF.h"
 
-// Extension interface
-#include "RenderingAPIs/OpenGL/SPK_GLExtHandler.h" // 1.01
-
 // Mother Renderer
 #include "RenderingAPIs/OpenGL/SPK_GLRenderer.h"
 
-// Renderers
-#include "RenderingAPIs/OpenGL/SPK_GLPointRenderer.h"
-#include "RenderingAPIs/OpenGL/SPK_GLLineRenderer.h"
-#include "RenderingAPIs/OpenGL/SPK_GLQuadRenderer.h"
-#include "RenderingAPIs/OpenGL/SPK_GLLineTrailRenderer.h" // 1.03
-
 // New OpenGL 2+ only renderers
 #include "RenderingAPIs/OpenGL/SPK_GL2PointRenderer.h"
+#include "RenderingAPIs/OpenGL/SPK_GL2LineRenderer.h"
 
 #endif

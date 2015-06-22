@@ -15,12 +15,15 @@ using namespace std;
 #define UNIT_ANIM_SPAWN 4
 
 #define UNIT_SOUND_STATIC 1
-#define UNIT_SOUND_HIT 2
+#define UNIT_SOUND_WALK 2
 #define UNIT_SOUND_DEATH 3
 #define UNIT_SOUND_SPAWN 4
-#define UNIT_SOUND_ABILITY 5
-#define UNIT_SOUND_CELEBRATE 6
-#define UNIT_SOUND_FAIL 7
+#define UNIT_SOUND_HIT 5
+#define UNIT_SOUND_ABILITY 6
+#define UNIT_SOUND_CELEBRATE 7
+#define UNIT_SOUND_FAIL 8
+
+#define UNIT_PHYSICS_HEIGHT 1.7f
 
 
 class UnitType;
@@ -44,7 +47,7 @@ class UnitTypeSound
 {
 	public:
 		int id;
-		Sound * snd;
+		AudioPtr snd;
 		int type;
 };
 
@@ -55,8 +58,11 @@ class UnitParams
 		float melee_damage;     // hit points
 		int melee_delay;        // milliseconds
 		int melee_cooldown;     // milliseconds
+		float melee_range;      // meters
 		int special_delay;      // milliseconds
 		int special_cooldown;   // milliseconds
+		bool invincible;        // cannot be hurt in any way
+		float weapon_damage;    // damage multiplier
 };
 
 class UnitType
@@ -67,7 +73,9 @@ class UnitType
 		string name;
 		CRC32 id;
 
-		AssimpModel * model;
+		AssimpModel* model;
+		AssimpNode* node_head;
+
 		btConvexShape* col_shape;
 		float begin_health;
 		vector<WeaponType*> spawn_weapons;
@@ -86,7 +94,7 @@ class UnitType
 		~UnitType();
 
 	public:
-		Sound* getSound(int type);
+		AudioPtr getSound(int type);
 		UnitTypeAnimation* getAnimation(int type);
 
 		Mod * getMod() { return this->mod; }

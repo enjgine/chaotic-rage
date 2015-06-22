@@ -57,6 +57,31 @@ void displayMessageBox(string msg)
 
 
 /**
+* Returns an array of names of system maps
+*
+* Example return value:
+*    <
+*    therlor_valley
+*    debug
+*    >
+*
+* Please free the result when you are done.
+**/
+std::vector<string>* getSystemMapNames()
+{
+	std::vector<string>* maps = new vector<string>();
+
+	maps->push_back("therlor_valley");
+	maps->push_back("lakeside");
+	maps->push_back("stormy_desert");
+	maps->push_back("caves");
+	maps->push_back("test");
+
+	return maps;
+}
+
+
+/**
 * Returns an array of names of system mods
 *
 * Example return value:
@@ -67,12 +92,11 @@ void displayMessageBox(string msg)
 *
 * Please free the result when you are done.
 **/
-list<string> * getSystemModNames()
+vector<string> * getSystemModNames()
 {
 	// TODO: Actually code this!
-	list<string> * out = new list<string>();
+	vector<string> * out = new vector<string>();
 	out->push_back("cr");
-	out->push_back("australia_day");
 	out->push_back("test");
 	return out;
 }
@@ -93,6 +117,45 @@ list<string> * getSystemModNames()
 vector<string> * getUserModFilenames()
 {
 	return new vector<string>();
+}
+
+
+/**
+* Fake version of the SDL2 key lookup by name
+* Only includes letter keys
+**/
+SDL_Keycode SDL_GetKeyFromName(const char* name)
+{
+	switch (name[0]) {
+		case 'a': return SDLK_a;
+		case 'b': return SDLK_b;
+		case 'c': return SDLK_c;
+		case 'd': return SDLK_d;
+		case 'e': return SDLK_e;
+		case 'f': return SDLK_f;
+		case 'g': return SDLK_g;
+		case 'h': return SDLK_h;
+		case 'i': return SDLK_i;
+		case 'j': return SDLK_j;
+		case 'k': return SDLK_k;
+		case 'l': return SDLK_l;
+		case 'm': return SDLK_m;
+		case 'n': return SDLK_n;
+		case 'o': return SDLK_o;
+		case 'p': return SDLK_p;
+		case 'q': return SDLK_q;
+		case 'r': return SDLK_r;
+		case 's': return SDLK_s;
+		case 't': return SDLK_t;
+		case 'u': return SDLK_u;
+		case 'v': return SDLK_v;
+		case 'w': return SDLK_w;
+		case 'x': return SDLK_x;
+		case 'y': return SDLK_y;
+		case 'z': return SDLK_z;
+		default:
+			return SDLK_UNKNOWN;
+	}
 }
 
 

@@ -8,19 +8,37 @@
 8	Latin-A Ext: ŨŔĶĳĖĠ
 9	Quest type
 10	Weaponry
-11	Battlefield
-12	Pirate type
-13	V'ew
-14	Set up group battle
-15	Start single battle
-16	Start team battle
-17	Start quest
-18	Standard unit weapons
-19	Standard game type weapons
-20	Save weapon settings
-21	Direct
-22	Local
-23	Internet
-24	Hostname
-25	Refresh list
-26	Join game
+11	Environment
+12	Battlefield
+13	Pirate type
+14	V'ew
+15	Set up group battle
+16	Start single battle
+17	Start team battle
+18	Start quest
+19	Standard unit weapons
+20	Standard game type weapons
+21	Save weapon settings
+22	Time of day
+23	Day/night cycle
+24	Amount of rain
+25	Amount of snow
+26	Random weather
+27	Allow game type to change weather
+28	Save environment settings
+29	Direct
+30	Local
+31	Internet
+32	Hostname
+33	Refresh list
+34	Join game
+35	MSAA
+36	Tex Filter
+37	Language
+38	Fullscreen
+39	Screen width
+40	Screen height
+41	Save
+42	Quit? Really?
+43	Yes
+44	No

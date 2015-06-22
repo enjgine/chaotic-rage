@@ -3,7 +3,7 @@
 
 if [ "$PLATFORM" == "linux" ]; then
 	sudo apt-get update -qq || exit 1
-	sudo apt-get install -qq libgl1-mesa-dev libglu1-mesa-dev libglew-dev liblua5.1-0-dev libfreetype6-dev zlib-bin freeglut3-dev >/dev/null || exit 1
+	sudo apt-get install -qq libgl1-mesa-dev libglu1-mesa-dev libglew-dev libfreetype6-dev zlib-bin freeglut3-dev >/dev/null || exit 1
 
 	cd tools/linux;
 	./assimp.sh >/dev/null || exit 1;
@@ -22,8 +22,8 @@ elif [ "$PLATFORM" == "android" ]; then
 	sudo apt-get update -qq || exit 1
 	sudo apt-get install -qq --force-yes ant imagemagick >/dev/null || exit 1;
 
-	# Needed for x64 machines (packages removed between Ubuntu 12.04 LTS and Ubuntu 14.04 LTS)
-	if [ `uname -m` = x86_64 ] && [ `lsb_release -rs` != "14.04" ]; then
+	# Needed for x64 machines (packages removed after Ubuntu 12.04 LTS)
+	if [ `uname -m` = x86_64 ] && [ `lsb_release -rs` == "12.04" ]; then
 		sudo apt-get install -qq --force-yes libgd2-xpm ia32-libs ia32-libs-multiarch >/dev/null || exit 1;
 	fi
 
@@ -31,7 +31,7 @@ elif [ "$PLATFORM" == "android" ]; then
 	# sudo apt-get install openjdk-7-jdk
 
 	# Download and extract SDK
-	SDK_FILE="android-sdk_r22.6.2-linux.tgz"
+	SDK_FILE="android-sdk_r24.0.2-linux.tgz"
 	SDK_LINK="http://dl.google.com/android/${SDK_FILE}"
 	if [ ! -f ${SDK_FILE} ]; then
 		wget ${SDK_LINK} || exit 1
@@ -47,12 +47,11 @@ elif [ "$PLATFORM" == "android" ]; then
 	echo "sdk.dir=${ANDROID_HOME}" > local.properties
 
 	# Install required Android components
-	echo 'y' | android update sdk -a --filter platform-tools --no-ui --force >/dev/null || exit 1
-	echo 'y' | android update sdk -a --filter build-tools-19.1.0 --no-ui --force >/dev/null || exit 1
-	echo 'y' | android update sdk -a --filter android-10 --no-ui --force >/dev/null || exit 1
+	echo 'y' | android update sdk --all --filter platform-tools,build-tools-22.0.0,android-10 --no-ui --force >/dev/null || exit 1
 
 	# Download and extract NDK
-	NDK_FILE="android-ndk64-r10-linux-x86_64.tar.bz2"
+	# 32-bit to avoid 'cannot locate symbol "signal" referenced by "libSDL2.so"'
+	NDK_FILE="android-ndk32-r10b-linux-x86.tar.bz2"
 	NDK_LINK="http://dl.google.com/android/ndk/${NDK_FILE}"
 	if [ ! -f ${NDK_FILE} ]; then
 		wget ${NDK_LINK} || exit 1;

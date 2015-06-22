@@ -30,7 +30,9 @@ void chdirToDataDir()
 **/
 string getUserDataDir()
 {
-	return "/";
+	// TODO: Use dedicated folder instead of the root folder of the (emulated)
+	// sd-card to store the config files
+	return "/sdcard/";
 }
 
 
@@ -57,6 +59,31 @@ void displayMessageBox(string msg)
 
 
 /**
+* Returns an array of names of system maps
+*
+* Example return value:
+*    <
+*    therlor_valley
+*    debug
+*    >
+*
+* Please free the result when you are done.
+**/
+std::vector<string>* getSystemMapNames()
+{
+	std::vector<string>* maps = new vector<string>();
+
+	maps->push_back("therlor_valley");
+	maps->push_back("lakeside");
+	maps->push_back("stormy_desert");
+	maps->push_back("caves");
+	maps->push_back("test");
+
+	return maps;
+}
+
+
+/**
 * Returns an array of names of system mods
 *
 * Example return value:
@@ -67,12 +94,11 @@ void displayMessageBox(string msg)
 *
 * Please free the result when you are done.
 **/
-list<string> * getSystemModNames()
+vector<string> * getSystemModNames()
 {
 	// TODO: Actually code this!
-	list<string> * out = new list<string>();
+	vector<string> * out = new vector<string>();
 	out->push_back("cr");
-	out->push_back("australia_day");
 	out->push_back("test");
 	return out;
 }
@@ -95,5 +121,3 @@ vector<string> * getUserModFilenames()
 	vector<string> * ret = new vector<string>();
 	return ret;
 }
-
-

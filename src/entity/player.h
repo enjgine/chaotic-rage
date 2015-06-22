@@ -24,6 +24,7 @@ class Player : public Unit
 			KEY_LIFT,
 			KEY_MELEE,
 			KEY_SPECIAL,
+			KEY_ZOOM,
 		};
 
 	public:
@@ -35,18 +36,21 @@ class Player : public Unit
 		Vehicle* drive_old;
 
 	public:
-		Player(UnitType *uc, GameState *st, float x, float y, float z, Faction fac, int slot);
+		Player(UnitType *uc, GameState *st, Faction fac, int slot, float x, float z);
+		Player(UnitType *uc, GameState *st, Faction fac, int slot, float x, float y, float z);
+		Player(UnitType *uc, GameState *st, Faction fac, int slot, btTransform & loc);
 		virtual ~Player();
 
 	public:
+		void resetKeyPress(bool resetHistory = false);
 		void keyPress(Key idx);
 		void keyRelease(Key idx);
 		void handleKeyChange();
 		void angleFromMouse(int x, int y, int delta);
-		void setKeys(Uint8 bitfield);		// TODO: Use 16-bits
-		Uint8 packKeys();					// TODO: Use 16-bits
+		void setKeys(Uint16 bitfield);
+		Uint16 packKeys();
 
 	public:
 		virtual void update(int delta);
-		virtual int takeDamage(float damage);
+		virtual void die();
 };

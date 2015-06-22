@@ -2,20 +2,20 @@
 //
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
+#include "net_server.h"
+
 #include <iostream>
-#include <math.h>
 #include <algorithm>
 #include <SDL_net.h>
 
 #include "net.h"
-#include "net_server.h"
 #include "../util/serverconfig.h"
 #include "../rage.h"
+#include "../game_engine.h"
 #include "../game_state.h"
 #include "../map/map.h"
-#include "../lua/gamelogic.h"
+#include "../script/gamelogic.h"
 #include "../entity/ammo_round.h"
-#include "../entity/decaying.h"
 #include "../entity/entity.h"
 #include "../entity/object.h"
 #include "../entity/pickup.h"
@@ -23,11 +23,14 @@
 #include "../entity/player.h"
 #include "../entity/vehicle.h"
 #include "../entity/wall.h"
+#include "../mod/mod.h"
+#include "../mod/mod_manager.h"
 #include "../mod/unittype.h"
 #include "../mod/walltype.h"
 #include "../mod/objecttype.h"
 #include "../mod/pickuptype.h"
 #include "../mod/weapontype.h"
+#include "../render_opengl/hud_label.h"
 
 using namespace std;
 
@@ -198,13 +201,13 @@ bool NetServer::update()
 				if ((*cli)->seq > (*it).seq) continue;
 				if ((*it).dest != NULL && (*it).dest != (*cli)) continue;
 
-				unsigned int futurePktLen = pkt->len + 1 + (*it).size;
-				if (futurePktLen >= MAX_PKT_SIZE) {
+				unsigned int nextPktLen = pkt->len + 1 + (*it).size;
+				if (nextPktLen >= MAX_PKT_SIZE) {
 					cout << "Error: Server: Too many messages. Shutting down." << endl;
 					SDLNet_FreePacket(pkt);
 					return false;
 				}
-				assert(futurePktLen <= MAX_PKT_SIZE);
+				assert(nextPktLen <= MAX_PKT_SIZE);
 
 				*ptr = (*it).type;
 				ptr++; pkt->len++;
@@ -263,6 +266,16 @@ void NetServer::dropClient(NetServerClientInfo *client)
 }
 
 
+/**
+* Handle errors
+* At the moment it just logs to stderr but could possibly be more proactive
+**/
+void NetServer::error(string msg)
+{
+	cerr << msg << endl;
+}
+
+
 
 /**
 ***  One method for each outgoing network message the server sends out
@@ -271,8 +284,16 @@ void NetServer::dropClient(NetServerClientInfo *client)
 void NetServer::addmsgInfoResp()
 {
 	//cout << "INFO_RESP" << endl;
-	NetMsg msg(INFO_RESP, 0);
+	string mod = GEng()->mm->getSupplOrBase()->getName();
+	string map = this->st->map->getName();
+
+	NetMsg msg(INFO_RESP, mod.length() + 2 + map.length() + 2);
 	msg.seq = this->seq;
+
+	pack(msg.data, "ss",
+		mod.c_str(), map.c_str()
+	);
+
 	messages.push_back(msg);
 }
 
@@ -281,7 +302,7 @@ void NetServer::addmsgJoinAcc(NetServerClientInfo *client)
 	//cout << "JOIN_OKAY" << endl;
 	string map = this->st->map->getName();
 
-	NetMsg msg(JOIN_OKAY, 4 + map.length());
+	NetMsg msg(JOIN_OKAY, 2 + map.length() + 2);
 	msg.seq = this->seq;
 
 	pack(msg.data, "hs",
@@ -309,6 +330,24 @@ void NetServer::addmsgDataCompl()
 void NetServer::addmsgChat()
 {
 	// TODO: Implement
+}
+
+void NetServer::addmsgHUD(HUDLabel *l)
+{
+	//cout << "HUD: " << l->data << endl;
+	// TODO: Implement a proper unique check
+	messages.remove_if(IsTypeUniqPred(HUD_MSG, l->x + l->y));
+
+	NetMsg msg(HUD_MSG, 4*2 + l->data.length()+2 + 2 + 4*4);
+	msg.seq = this->seq;
+	msg.uniq = l->x + l->y;
+
+	pack(msg.data, "lls hffff",
+		l->x, l->y, l->data.c_str(),
+		l->align, l->r, l->g, l->b, l->a
+	);
+
+	messages.push_back(msg);
 }
 
 void NetServer::addmsgClientDrop(NetServerClientInfo *client)
@@ -592,21 +631,24 @@ unsigned int NetServer::handleChat(NetServerClientInfo *client, Uint8 *data, uns
 unsigned int NetServer::handleKeyMouseStatus(NetServerClientInfo *client, Uint8 *data, unsigned int size)
 {
 	Sint16 x, y, delta;
-	Uint8 keys;
+	Uint16 keys;
 
-	unpack(data, "hhhc",
+	unpack(data, "hhhh",
 		&x, &y, &delta, &keys
 	);
 
 	// Find the unit for this slot
 	Player *p = static_cast<Player*>(st->findUnitSlot(client->slot));
-	if (p == NULL) return 7;
+	if (p == NULL) {
+		this->error("Player not found in slot " + client->slot);
+		return 8;
+	}
 
 	// Update the unit details
 	p->angleFromMouse(x, y, delta);
 	p->setKeys(keys);
 
-	return 7;
+	return 8;
 }
 
 unsigned int NetServer::handleQuit(NetServerClientInfo *client, Uint8 *data, unsigned int size)

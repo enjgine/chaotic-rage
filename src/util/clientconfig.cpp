@@ -29,6 +29,8 @@ static cfg_opt_t config_opts[] =
 	CFG_INT((char*) "gl-tex-filter", 4, CFGF_NONE),
 
 	CFG_BOOL((char*) "fullscreen", cfg_false, CFGF_NONE),
+	CFG_INT((char*) "width", 1280, CFGF_NONE),
+	CFG_INT((char*) "height", 800, CFGF_NONE),
 
 	CFG_STR((char*) "lang", 0, CFGF_NONE),
 
@@ -46,6 +48,11 @@ static cfg_opt_t config_opts[] =
 **/
 ClientConfig::ClientConfig()
 {
+	this->gl = NULL;
+	this->fullscreen = false;
+	this->width = 0;
+	this->height = 0;
+
 	this->load();
 }
 
@@ -67,8 +74,10 @@ void ClientConfig::load()
 	this->gl->msaa = cfg_getint(cfg, "gl-msaa");
 	this->gl->tex_filter = cfg_getint(cfg, "gl-tex-filter");
 
-	// Fullscreen
+	// Screen res
 	this->fullscreen = cfg_getbool(cfg, "fullscreen");
+	this->width = cfg_getint(cfg, "width");
+	this->height = cfg_getint(cfg, "height");
 
 	// Language
 	char* tmp = cfg_getstr(cfg, "lang");
@@ -101,6 +110,8 @@ void ClientConfig::save()
 	fprintf(fp, "gl-msaa = %i\n", this->gl->msaa);
 	fprintf(fp, "gl-tex-filter = %i\n", this->gl->tex_filter);
 	fprintf(fp, "fullscreen = %s\n", (this->fullscreen ? "true" : "false"));
+	fprintf(fp, "width = %i\n", this->width);
+	fprintf(fp, "height = %i\n", this->height);
 	fprintf(fp, "lang = %s\n", this->lang.c_str());
 
 	fclose(fp);
@@ -112,21 +123,34 @@ void ClientConfig::save()
 **/
 void ClientConfig::initRender(GameState *st)
 {
-	if (GEng()->cmdline->render_class == "debug") {
-		GEng()->render = new RenderDebug(st);
-
-	} else if (GEng()->cmdline->render_class == "null") {
-		GEng()->render = new RenderNull(st);
-
-	} else if (GEng()->cmdline->render_class == "ascii") {
-		GEng()->render = new RenderAscii(st);
-
-	} else {
+	#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 		GEng()->render = new RenderOpenGL(st, this->gl);
+	#else
+		if (GEng()->cmdline->render_class == "debug") {
+			GEng()->render = new RenderDebug(st);
+		} else if (GEng()->cmdline->render_class == "null") {
+			GEng()->render = new RenderNull(st);
+		} else if (GEng()->cmdline->render_class == "ascii") {
+			GEng()->render = new RenderAscii(st);
+		} else {
+			GEng()->render = new RenderOpenGL(st, this->gl);
+		}
+	#endif
+
+	// Determine if fullscreen or not
+	bool fs = false;
+	if (GEng()->cmdline->resolution[0] == 0) {
+		fs = this->fullscreen;
+	} else if (GEng()->cmdline->resolution[0] == 2) {
+		fs = true;
 	}
 
-	// TODO: Load these settings from a config file
-	GEng()->render->setScreenSize(1000, 700, this->fullscreen);
+	// Set size
+	if (GEng()->cmdline->resolution[1] != 0 && GEng()->cmdline->resolution[2] != 2) {
+		GEng()->render->setScreenSize(GEng()->cmdline->resolution[1], GEng()->cmdline->resolution[2], fs);
+	} else {
+		GEng()->render->setScreenSize(this->width, this->height, fs);
+	}
 }
 
 

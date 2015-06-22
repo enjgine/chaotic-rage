@@ -25,10 +25,14 @@ AnimPlay::AnimPlay(AssimpModel* model)
 {
 	this->st = model->mod->st;
 	this->anim = NULL;
+	this->start_time = 0;
+	this->start_frame = 0;
+	this->end_frame = 0;
 	this->loop = true;
 	this->ended_func = NULL;
 	this->ended_data = NULL;
 	this->pause_time = 0;
+	this->custom_transform = glm::mat4(1.0f);
 	this->calcTransformsStatic();
 }
 
@@ -101,16 +105,6 @@ void AnimPlay::setEndedCallback(AnimPlayCallback func)
 
 
 /**
-* Set callback when animation ends.
-* Only sets the data, not the function
-**/
-void AnimPlay::setEndedCallback(void* data)
-{
-	this->ended_data = data;
-}
-
-
-/**
 * Clear the animation
 **/
 void AnimPlay::clearAnimation()
@@ -148,6 +142,21 @@ void AnimPlay::addMoveNode(AssimpNode *nd)
 
 
 /**
+* Remove a "move node", a node which is transformed by some aspect of the game engine
+* If this brings the model back to static, we re-calc the transforms.
+**/
+void AnimPlay::removeMoveNode(AssimpNode *nd)
+{
+	this->move_nodes.erase(nd);
+
+	// If it's static, the calcs are really easy
+	if (this->anim == NULL && this->move_nodes.empty()) {
+		this->calcTransformsStatic();
+	}
+}
+
+
+/**
 * Set the transform for a move node
 **/
 void AnimPlay::setMoveTransform(string node, glm::mat4 transform)
@@ -169,17 +178,24 @@ void AnimPlay::setMoveTransform(AssimpNode *nd, glm::mat4 transform)
 
 
 /**
-* Clears the "move node", a node which is transformed by some aspect of the game engine.
-* Because this might bring the model back to static, we re-calc the transforms.
+* Set the custom transform
+* This is applied to the root node
 **/
-void AnimPlay::resetMoveTransform(string node)
+void AnimPlay::setCustomTransform(glm::mat4 custom_transform)
 {
-	AssimpNode* nd = this->model->findNode(this->model->rootNode, node);
-	if (nd == NULL) return;
+	this->custom_transform = custom_transform;
+	if (this->anim == NULL && this->move_nodes.empty()) {
+		this->calcTransformsStatic();
+	}
+}
 
-	this->move_nodes[nd] = glm::mat4();
 
-	// If it's static, the calcs are really easy
+/**
+* Set the custom transform to a translation matrix
+**/
+void AnimPlay::setCustomTransform(glm::vec3 translate)
+{
+	this->custom_transform = glm::translate(glm::mat4(1.0f), translate);
 	if (this->anim == NULL && this->move_nodes.empty()) {
 		this->calcTransformsStatic();
 	}
@@ -211,7 +227,7 @@ void AnimPlay::resume()
 **/
 void AnimPlay::calcTransformsStatic()
 {
-	this->calcTransformNodeStatic(this->model->rootNode, glm::mat4());
+	this->calcTransformNodeStatic(this->model->rootNode, this->custom_transform);
 }
 
 
@@ -291,7 +307,7 @@ void AnimPlay::calcTransforms()
 		animTick = 0.0f;
 	}
 
-	this->calcTransformNode(this->model->rootNode, glm::mat4(), animTick);
+	this->calcTransformNode(this->model->rootNode, this->custom_transform, animTick);
 }
 
 

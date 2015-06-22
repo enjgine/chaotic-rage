@@ -6,7 +6,7 @@
 #include <BulletCollision/CollisionDispatch/btGhostObject.h>
 #include "../game_engine.h"
 #include "../game_state.h"
-#include "../lua/gamelogic.h"
+#include "../script/gamelogic.h"
 #include "../rage.h"
 #include "../render_opengl/animplay.h"
 #include "../game_settings.h"
@@ -16,28 +16,76 @@
 #include "unit.h"
 #include "vehicle.h"
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 using namespace std;
 
 
-Player::Player(UnitType *uc, GameState *st, float x, float y, float z, Faction fac, int slot) : Unit(uc, st, x, y, z, fac)
+/**
+* Spawn player using map X/Z coords
+**/
+Player::Player(UnitType *uc, GameState *st, Faction fac, int slot, float x, float z) : Unit(uc, st, fac, x, z)
 {
-	for (int i = 0; i < 16; i++) {
-		this->key[i] = 0;
-		this->lkey[i] = 0;
-	}
+	this->resetKeyPress(true);
 
 	this->mouse_angle = 0.0f;
 	this->vertical_angle = 0.0f;
-
 	this->walking = false;
 	this->anim->pause();
-
 	this->slot = slot;
 	this->drive_old = NULL;
 }
 
+
+/**
+* Spawn player using X/Y/Z coords
+**/
+Player::Player(UnitType *uc, GameState *st, Faction fac, int slot, float x, float y, float z) : Unit(uc, st, fac, x, y, z)
+{
+	this->resetKeyPress(true);
+
+	this->mouse_angle = 0.0f;
+	this->vertical_angle = 0.0f;
+	this->walking = false;
+	this->anim->pause();
+	this->slot = slot;
+	this->drive_old = NULL;
+}
+
+
+/**
+* Spawn player using specific coordinates
+**/
+Player::Player(UnitType *uc, GameState *st, Faction fac, int slot, btTransform & loc) : Unit(uc, st, fac, loc)
+{
+	this->resetKeyPress(true);
+
+	this->mouse_angle = 0.0f;
+	this->vertical_angle = 0.0f;
+	this->walking = false;
+	this->anim->pause();
+	this->slot = slot;
+	this->drive_old = NULL;
+}
+
+
 Player::~Player()
 {
+}
+
+
+/**
+* Resets all pressed keys
+**/
+void Player::resetKeyPress(bool resetHistory /* = false */)
+{
+	for (int i = 0; i < 16; i++) {
+		this->key[i] = 0;
+		if (resetHistory) {
+			this->lkey[i] = 0;
+		}
+	}
 }
 
 
@@ -62,10 +110,10 @@ void Player::keyRelease(Key idx)
 /**
 * Packs a bitfield of keys
 **/
-Uint8 Player::packKeys()
+Uint16 Player::packKeys()
 {
 	Uint8 k = 0;
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < 16; i++) {
 		k |= this->key[i] << i;
 	}
 	return k;
@@ -74,11 +122,11 @@ Uint8 Player::packKeys()
 
 /**
 * Set all keys.
-* Bitfield should be a Uint8 of flags, with bit 0 => this->key[0], etc.
+* Bitfield should be a Uint16 of flags, with bit 0 => this->key[0], etc.
 **/
-void Player::setKeys(Uint8 bitfield)
+void Player::setKeys(Uint16 bitfield)
 {
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < 16; i++) {
 		this->key[i] = (bitfield & (1 << i)) != 0;
 	}
 }
@@ -118,6 +166,10 @@ void Player::handleKeyChange()
 		this->endSpecialAttack();
 	}
 
+	if (this->key[KEY_ZOOM] && !this->lkey[KEY_ZOOM]) {
+		this->zoomWeapon();
+	}
+
 	for (int i = 0; i < 16; i++) this->lkey[i] = this->key[i];
 }
 
@@ -138,24 +190,20 @@ void Player::angleFromMouse(int x, int y, int delta)
 		this->vertical_angle = 0.0f;
 	}
 
-	if (this->drive || GEng()->render->viewmode == GameSettings::firstPerson) {
-		float max_angle;
-
-		if (this->drive) {
-			max_angle = 10.0f;
-		} else {
-			max_angle = 70.0f;
-		}
-
-		sensitivity *= 0.5f;
-		change_dist = static_cast<float>(y) * sensitivity;
-		this->vertical_angle -= change_dist;
-		if (this->vertical_angle > max_angle) this->vertical_angle = max_angle;
-		if (this->vertical_angle < -max_angle) this->vertical_angle = -max_angle;
+	// Can't tilt as much in a vehicle
+	float max_angle;
+	if (this->drive) {
+		max_angle = 10.0f;
 	} else {
-		// Not in first person view, reset the vertical angle
-		this->vertical_angle = 0.0f;
+		max_angle = 70.0f;
 	}
+
+	// Set vertical angle
+	sensitivity *= 0.5f;
+	change_dist = static_cast<float>(y) * sensitivity;
+	this->vertical_angle -= change_dist;
+	if (this->vertical_angle > max_angle) this->vertical_angle = max_angle;
+	if (this->vertical_angle < -max_angle) this->vertical_angle = -max_angle;
 
 	this->drive_old = this->drive;
 }
@@ -171,6 +219,7 @@ void Player::update(int delta)
 
 	if (this->drive) {
 		this->drive->operate(this, delta, this->key[KEY_UP], this->key[KEY_DOWN], this->key[KEY_LEFT], this->key[KEY_RIGHT], this->mouse_angle, this->vertical_angle);
+		this->resetIdleTime();
 
 	} else {
 		bool walking = false;
@@ -183,10 +232,6 @@ void Player::update(int delta)
 		// Mouse rotation
 		btQuaternion rot = btQuaternion(btVector3(0.0f, 1.0f, 0.0f), DEG_TO_RAD(this->mouse_angle));
 		ghost->getWorldTransform().setBasis(btMatrix3x3(rot));
-		if (GEng()->render->viewmode == GameSettings::firstPerson) {
-			rot *= btQuaternion(btVector3(-1.0f, 0.0f, 0.0f), DEG_TO_RAD(this->vertical_angle));
-			ghost->getWorldTransform().setRotation(rot);
-		}
 
 		// Forward/backward
 		btVector3 forwardDir = xform.getBasis() * btVector3(0.0f, 0.0f, walkSpeed);
@@ -210,7 +255,6 @@ void Player::update(int delta)
 
 		// Apply any force present on the unit
 		walkDirection += this->force;
-
 		this->character->setVelocityForTimeInterval(walkDirection, 1.0f);
 
 		// If "walking" state changes, update animation.
@@ -220,6 +264,19 @@ void Player::update(int delta)
 			this->anim->pause();
 		}
 		this->walking = walking;
+
+		// Reset the idle timer
+		if (this->walking) {
+			this->walkSound();
+			this->resetIdleTime();
+		}
+
+		// Angle the head
+		if (uc->node_head) {
+			glm::mat4 headxform = glm::mat4();
+			headxform = glm::rotate(headxform, this->vertical_angle, glm::vec3(-1.0f, 0.0f, 0.0f));
+			this->anim->setMoveTransform(uc->node_head, headxform);
+		}
 	}
 
 
@@ -230,22 +287,19 @@ void Player::update(int delta)
 
 
 /**
-* Receive damage from an outside source
+* The player has died
 **/
-int Player::takeDamage(float damage)
+void Player::die()
 {
-	int result = Unit::takeDamage(damage);
+	this->st->logic->raise_playerdied(this->slot);
 
-	if (result == 1) {
-		this->st->logic->raise_playerdied(this->slot);
+	Unit::die();
 
-		for (unsigned int i = 0; i < this->st->num_local; i++) {
-			if (this == this->st->local_players[i]->p) {
-				this->st->local_players[i]->p = NULL;
-				break;
-			}
+	for (unsigned int i = 0; i < this->st->num_local; i++) {
+		if (this == this->st->local_players[i]->p) {
+			this->st->local_players[i]->p = NULL;
+			break;
 		}
 	}
-
-	return result;
 }
+

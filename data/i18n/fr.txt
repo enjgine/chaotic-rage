@@ -8,19 +8,37 @@
 8	Quitter
 9	Type de jeu
 10	Armes
-11	Monde
-12	Personnages
-13	Vue
-14	Hôte de jeu en réseau
-15	Commencé la partie
+11	Environment
+12	Monde
+13	Personnages
+14	Vue
+15	Hôte de jeu en réseau
 16	Commencé la partie
 17	Commencé la partie
-18	L'arme standare du personnage
-19	L'arme standare du jeu
-20	Sauvgarder
-21	Direct
-22	Local
-23	En ligne
-24	Nom d'hôte
-25	Actualiser la liste
-26	Rejoindre la partie
+18	Commencé la partie
+19	L'arme standare du personnage
+20	L'arme standare du jeu
+21	Sauvgarder
+22	Time of day
+23	Day/night cycle
+24	Amount of rain
+25	Amount of snow
+26	Random weather
+27	Allow game type to change weather
+28	Save environment settings
+29	Direct
+30	Local
+31	En ligne
+32	Nom d'hôte
+33	Actualiser la liste
+34	Rejoindre la partie
+35	MSAA
+36	Tex Filter
+37	Language
+38	Fullscreen
+39	Screen width
+40	Screen height
+41	Save
+42	Quit? Really?
+43	Yes
+44	No

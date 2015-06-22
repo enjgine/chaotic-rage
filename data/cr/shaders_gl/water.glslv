@@ -1,5 +1,3 @@
-#version 130
-
 in vec3 vPosition;
 in vec3 vNormal;
 in vec2 vTexUV;
@@ -11,6 +9,6 @@ uniform mat4 uMVP;
 
 void main()
 {
-	gl_Position = uMVP * vec4(vPosition, 1.0f);
+	gl_Position = uMVP * vec4(vPosition, 1.0);
 	fTexUV = vTexUV;
 }

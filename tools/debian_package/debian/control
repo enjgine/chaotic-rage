@@ -1,32 +1,47 @@
 Source: chaoticrage
 Section: games
 Priority: optional
-Maintainer: Magnus Espersson <magnusespersson@gmail.com>
-Build-Depends:
- debhelper (>= 9.0.0),
- libsdl2-dev,
- liblua5.1-0-dev,
- libbullet-dev,
- libbulletdynamics2.81,
- libbulletcollision2.81,
- liblinearmath2.81,
- libassimp-dev,
- libfreetype6-dev,
- libgl1-mesa-dev,
- libglu1-mesa-dev,
- libglew-dev,
- libsdl2-mixer-dev,
- libsdl2-image-dev,
- libsdl2-net-dev
-Standards-Version: 3.9.5
+Maintainer: Josh Heidenreich <josh.sickmate@gmail.com>
+Build-Depends: debhelper (>= 9.0.0),
+    libsdl2-dev,
+    libbullet-dev,
+    libassimp-dev,
+    libfreetype6-dev,
+    libgl1-mesa-dev,
+    libglu1-mesa-dev,
+    libglew-dev,
+    libsdl2-mixer-dev,
+    libsdl2-image-dev,
+    libsdl2-net-dev,
+    libfontconfig-dev
+Standards-Version: 3.9.6
 Homepage: http://www.chaoticrage.com
 Vcs-Git: git://github.com:TheJosh/chaotic-rage.git
 Vcs-Browser: https://github.com/TheJosh/chaotic-rage
 
 Package: chaoticrage
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: An unusual zombie shooter game
- Chaotic Rage is a crazy top-view shooter. You can destroy everything with the
- many weapons, turrets and vehicles. Choose from multiple characters with
- unique skills and abilities.
+Depends: chaoticrage-data (= ${source:Version}),
+	fonts-dejavu-core,
+    ${shlibs:Depends},
+    ${misc:Depends}
+Description: Unusual 3D shooter game
+ Unusual 3D shooter game with zombies, tanks, boats, and helicopters.
+ Can be played in top-view, 3rd person or 1st person view.
+ Has particle effects, decent physics, weather effects, and day-night effects.
+ Multiple maps and gametypes.
+ Fully moddable.
+ .
+ This is the main game code
+ 
+Package: chaoticrage-data
+Architecture: all
+Depends: ${misc:Depends}
+Description: Unusual 3D shooter game - data files
+ Unusual 3D shooter game with zombies, tanks, boats, and helicopters.
+ Can be played in top-view, 3rd person or 1st person view.
+ Has particle effects, decent physics, weather effects, and day-night effects.
+ Multiple maps and gametypes.
+ Fully moddable.
+ .
+ This is the data files and maps

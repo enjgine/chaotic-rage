@@ -24,7 +24,6 @@
 #define H_SPK_GL2POINTRENDERER
 
 #include "RenderingAPIs/OpenGL/SPK_GLRenderer.h"
-#include "RenderingAPIs/OpenGL/SPK_GLExtHandler.h"
 #include "Extensions/Renderers/SPK_PointRendererInterface.h"
 #include <glm/glm.hpp>
 
@@ -74,6 +73,11 @@ namespace GL
 		* @param size : the size of the points
 		*/
 		GL2PointRenderer(float size = 1.0f);
+
+		/** 
+		* @brief Destructor of GL2PointRenderer
+		*/
+		virtual ~GL2PointRenderer();
 
 		/**
 		* @brief Creates and registers a new GL2PointRenderer
@@ -143,11 +147,14 @@ namespace GL
 
 		glm::mat4 vp_matrix;
 
-		GLuint vaoIndex;
+		GLVAO* vao;
 		GLuint vboPositionIndex;
 		GLuint vboColorIndex;
 		GLuint shaderIndex;
 		GLuint shaderVPIndex;
+
+		float* buffer;
+		size_t buffer_sz;
 
 	};
 

@@ -8,7 +8,6 @@
 class AnimPlay;
 class AssimpModel;
 class GameState;
-class Sound;
 class Unit;
 class WeaponType;
 class btCollisionShape;
@@ -38,6 +37,5 @@ class AmmoRound : public Entity
 		AmmoRound(GameState* st, btTransform& xform, WeaponType* wt, AssimpModel* model, Unit* owner, float mass = 0.0f);
 		virtual ~AmmoRound();
 
-		virtual Sound* getSound();
 		virtual void update(int delta);
 };

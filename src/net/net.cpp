@@ -2,11 +2,13 @@
 //
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
-#include <iostream>
-#include <math.h>
-#include <SDL_net.h>
-#include "../rage.h"
 #include "net.h"
+
+#include <iomanip>
+#include <iostream>
+#include <SDL_net.h>
+
+#include "../rage.h"
 #include "net_client.h"
 #include "net_server.h"
 
@@ -29,7 +31,7 @@ MsgClientRecv msg_client_recv [] = {
 	&NetClient::handleChat,             //<--  0x09
 	&NetClient::handlePlayerDrop,       //<--  0x0A
 	NULL,                               //<--  0x0B
-	NULL,                               //<--  0x0C
+	&NetClient::handleHUD,              //<--  0x0C
 	NULL,                               //<--  0x0D
 	&NetClient::handleUnitState,        //<--  0x0E
 	&NetClient::handleWallState,        //<--  0x0F

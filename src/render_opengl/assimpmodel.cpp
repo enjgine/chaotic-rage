@@ -10,6 +10,7 @@
 #include <assimp/cimport.h>
 #include <assimp/postprocess.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <btBulletDynamicsCommon.h>
 
 #include "gl_debug.h"
@@ -30,6 +31,7 @@ AssimpModel::AssimpModel(Mod* mod, string name)
 	this->boneIds = NULL;
 	this->boneWeights = NULL;
 	this->rootNode = NULL;
+	this->recenter = true;
 }
 
 
@@ -73,8 +75,8 @@ bool AssimpModel::load(Render3D* render, bool meshdata, AssimpLoadType loadtype)
 		flags |= aiProcess_RemoveRedundantMaterials;
 		flags |= aiProcess_OptimizeMeshes;
 		flags |= aiProcess_FindInvalidData;
-		flags |= aiProcess_OptimizeGraph;
 		flags |= aiProcess_SplitLargeMeshes;
+		this->recenter = false;
 	}
 
 	// Read the file from the mod
@@ -99,6 +101,10 @@ bool AssimpModel::load(Render3D* render, bool meshdata, AssimpLoadType loadtype)
 	}
 
 	free(data);
+
+	if (debug_enabled("loadbones")) {
+		cout << endl << this->name << endl;
+	}
 
 	if (render != NULL && render->is3D()) {
 		this->loadMeshes(true, sc);
@@ -134,6 +140,20 @@ void AssimpModel::calcBoundingBox(const struct aiScene* sc)
 	max.x = max.y = max.z = -1e10f;
 	this->calcBoundingBoxNode(sc->mRootNode, &min, &max, &trafo, sc);
 	boundingSize = btVector3(max.x - min.x, max.y - min.y, max.z - min.z);
+
+	// Recenter the model to the middle of the bounding box
+	if (this->recenter) {
+		glm::vec4 translate(
+			(min.x + max.x) / -2.0f,
+			(min.y + max.y) / -2.0f,
+			(min.z + max.z) / -2.0f,
+			1.0f
+		);
+		this->rootNode->transform[3] = translate;
+		if (debug_enabled("loadbones")) {
+			cout << "Recenter '" << rootNode->name << "' to " << rootNode->transform[3][0] << "x" << rootNode->transform[3][1] << "x" << rootNode->transform[3][2] << endl;
+		}
+	}
 }
 
 
@@ -255,6 +275,8 @@ void AssimpModel::loadMeshes(bool opengl, const struct aiScene* sc)
 		if (mesh->HasBones()) {
 			this->loadBones(mesh, myMesh);
 
+			this->recenter = false;
+
 			glGenBuffers(1, &buffer);
 			glBindBuffer(GL_ARRAY_BUFFER, buffer);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(Uint8)*4*mesh->mNumVertices, this->boneIds, GL_STATIC_DRAW);
@@ -275,6 +297,11 @@ void AssimpModel::loadMeshes(bool opengl, const struct aiScene* sc)
 			glBindBuffer(GL_ARRAY_BUFFER, buffer);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*mesh->mNumVertices, mesh->mTangents, GL_STATIC_DRAW);
 			myMesh->vao->setTangent(buffer);
+
+			glGenBuffers(1, &buffer);
+			glBindBuffer(GL_ARRAY_BUFFER, buffer);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*mesh->mNumVertices, mesh->mBitangents, GL_STATIC_DRAW);
+			myMesh->vao->setBitangent(buffer);
 		}
 
 		myMesh->vao->unbind();
@@ -288,7 +315,7 @@ void AssimpModel::loadMeshes(bool opengl, const struct aiScene* sc)
 * The physics code needs the actual mesh data.
 * If the mesh is used for physics, we load the faces and verts
 *
-* @param bool update Update the existing arrya of `AssimpMesh`, v.s. creating a new.
+* @param bool update Update the existing array of `AssimpMesh`, v.s. creating a new.
 **/
 void AssimpModel::loadMeshdata(bool update, const struct aiScene* sc)
 {
@@ -344,14 +371,14 @@ void AssimpModel::loadMaterials(Render3D* render, const struct aiScene* sc)
 		// Diffuse texture
 		if (pMaterial->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
 			if (pMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS) {
-				myMat->diffuse = this->loadTexture(render, path);
+				myMat->diffuse = this->loadTexture(render, &path);
 			}
 		}
 
 		// Normal map
 		if (pMaterial->GetTextureCount(aiTextureType_NORMALS) > 0) {
 			if (pMaterial->GetTexture(aiTextureType_NORMALS, 0, &path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS) {
-				myMat->normal = this->loadTexture(render, path);
+				myMat->normal = this->loadTexture(render, &path);
 			}
 		}
 
@@ -365,9 +392,9 @@ void AssimpModel::loadMaterials(Render3D* render, const struct aiScene* sc)
 *
 * TODO: We should save these in a std::map so we don't load the same stuff multiple times.
 **/
-SpritePtr AssimpModel::loadTexture(Render3D* render, aiString path)
+SpritePtr AssimpModel::loadTexture(Render3D* render, aiString* path)
 {
-	string p(path.data);
+	string p(path->data);
 
 	if (p.substr(0, 2) == ".\\") p = p.substr(2, p.size() - 2);
 	if (p.substr(0, 2) == "./") p = p.substr(2, p.size() - 2);

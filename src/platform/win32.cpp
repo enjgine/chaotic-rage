@@ -75,6 +75,44 @@ void displayMessageBox(string msg)
 
 
 /**
+* Returns an array of names of system maps
+*
+* Example return value:
+*    <
+*    therlor_valley
+*    debug
+*    >
+*
+* Please free the result when you are done.
+**/
+std::vector<string>* getSystemMapNames()
+{
+	std::vector<string>* maps = new vector<string>();
+
+	WIN32_FIND_DATA fdFile;
+	HANDLE hFind = NULL;
+
+	// Initial search
+	if ((hFind = FindFirstFile("maps\\*", &fdFile)) == INVALID_HANDLE_VALUE) {
+		return maps;
+	}
+
+	// Iterate over results
+	do {
+		if (fdFile.cFileName[0] != '.') {
+			if (fdFile.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+				maps->push_back(string(fdFile.cFileName));
+			}
+		}
+	} while(FindNextFile(hFind, &fdFile));
+
+	FindClose(hFind);
+
+	return maps;
+}
+
+
+/**
 * Returns an array of names of system mods
 *
 * Example return value:
@@ -85,9 +123,9 @@ void displayMessageBox(string msg)
 *
 * Please free the result when you are done.
 **/
-list<string> * getSystemModNames()
+vector<string> * getSystemModNames()
 {
-	list<string> * ret = new list<string>();
+	vector<string> * ret = new vector<string>();
 
 	WIN32_FIND_DATA fdFile;
 	HANDLE hFind = NULL;

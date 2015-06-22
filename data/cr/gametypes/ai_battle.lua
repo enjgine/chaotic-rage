@@ -1,5 +1,5 @@
 ----
-----  Lua script for the gametype "Zombies".
+----  Lua script for the gametype "AI Battle".
 ----
 
 
@@ -70,17 +70,15 @@ bind_npcdied(function()
 	end
 	
 	if num_dead == num_npcs - 1 then
-		show_alert_message("We have a victor!")
+		show_alert_message("We have a victory!")
 		add_timer(2000, function()
 			game_over(1);
 		end)
 		return
 	end
 	
-		
 	if num_dead % 5 == 0 then
 		show_alert_message("Let's throw them some more ammo")
-		ammo_drop()
+		game.addPickupRand("ammo_current");
 	end
 end);
-

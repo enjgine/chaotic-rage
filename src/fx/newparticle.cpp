@@ -4,19 +4,16 @@
 
 #include "newparticle.h"
 #include "../rage.h"
+#include "../game_state.h"
+#include "../spark/SPK.h"
 
 
 using namespace std;
 
 
-#ifdef USE_SPARK
-
-#include "../game_state.h"
-#include "../spark/SPK.h"
-
-
 // Gravity, the same for all particles
-SPK::Vector3D gravity(0.0f,-0.9f,0.0f);
+SPK::Vector3D gravity(0.0f, -0.9f, 0.0f);
+
 
 /**
 * Creates particles for a weapon.
@@ -34,27 +31,55 @@ void create_particles_weapon(GameState * st, btVector3 * begin, btVector3 * end)
 	btVector3 dir = *end - *begin;
 	dir.normalize();
 
+	// Bullets - model
 	SPK::Model* model = SPK::Model::create(
 		SPK::FLAG_RED | SPK::FLAG_GREEN | SPK::FLAG_BLUE | SPK::FLAG_ALPHA,
 		SPK::FLAG_ALPHA,
 		SPK::FLAG_RED | SPK::FLAG_GREEN | SPK::FLAG_BLUE
 	);
-
 	model->setParam(SPK::PARAM_ALPHA, 1.0f, 0.0f);
-	model->setParam(SPK::PARAM_RED, 0.0f, 1.0f);
-	model->setParam(SPK::PARAM_GREEN, 0.0f, 1.0f);
-	model->setParam(SPK::PARAM_BLUE, 0.0f, 1.0f);
+	model->setParam(SPK::PARAM_RED, 0.1f, 0.3f);
+	model->setParam(SPK::PARAM_GREEN, 0.1f, 0.3f);
+	model->setParam(SPK::PARAM_BLUE, 0.1f, 0.3f);
 	model->setLifeTime(0.5f, 0.7f);
 
-	// Emitter
+	// Bullets - emitter
 	SPK::Emitter* emitter = SPK::StraightEmitter::create(SPK::Vector3D(dir.x(), dir.y(), dir.z()));
 	emitter->setZone(SPK::Point::create(SPK::Vector3D(begin->x(), begin->y(), begin->z())));
 	emitter->setFlow(-1);
 	emitter->setTank(25);
 	emitter->setForce(40.0f, 50.0f);
 
+	// Bullets - group
 	SPK::Group* group = SPK::Group::create(model, 25);
 	group->addEmitter(emitter);
+	st->addParticleGroup(group);
+
+
+	// Shells - model
+	model = SPK::Model::create(
+		SPK::FLAG_RED | SPK::FLAG_GREEN | SPK::FLAG_BLUE | SPK::FLAG_ALPHA,
+		SPK::FLAG_ALPHA,
+		SPK::FLAG_RED | SPK::FLAG_GREEN | SPK::FLAG_BLUE
+	);
+	model->setParam(SPK::PARAM_ALPHA, 0.5f, 0.0f);
+	model->setParam(SPK::PARAM_RED, 0.8f, 1.0f);
+	model->setParam(SPK::PARAM_GREEN, 0.8f, 1.0f);
+	model->setParam(SPK::PARAM_BLUE, 0.2f, 0.4f);
+	model->setLifeTime(0.5f, 2.0f);
+
+	// Shells - emitter
+	btVector3 rotated = dir * btMatrix3x3(btQuaternion(btVector3(0.0f, 1.0f, 0.0f), PI * 0.5f));
+	emitter = SPK::SphericEmitter::create(SPK::Vector3D(rotated.x(), rotated.y(), rotated.z()), 0.02f * PI, 0.06f * PI);
+	emitter->setZone(SPK::Point::create(SPK::Vector3D(begin->x(), begin->y(), begin->z())));
+	emitter->setFlow(0.5f);
+	emitter->setTank(3);
+	emitter->setForce(3.0f, 5.0f);
+
+	// Shells - group
+	group = SPK::Group::create(model, 3);
+	group->addEmitter(emitter);
+	group->setGravity(gravity);
 	st->addParticleGroup(group);
 }
 
@@ -204,11 +229,3 @@ void create_particles_explosion(GameState * st, const btVector3& location, float
 	st->addParticleGroup(group);
 }
 
-
-#else
-// No SPARK particles - these become a no-op
-void create_particles_weapon(GameState * st, btVector3 * begin, btVector3 * end) {}
-void create_particles_flamethrower(GameState * st, btVector3 * begin, btVector3 * end) {}
-void create_particles_blood_spray(GameState * st, const btVector3& location, float damage) {}
-void create_particles_explosion(GameState * st, const btVector3& location, float damage) {}
-#endif

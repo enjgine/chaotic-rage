@@ -4,10 +4,7 @@
 
 #pragma once
 #include "rage.h"
-
-using namespace std;
-
-
+class WeaponType;
 
 /**
 * Per-faction game settings
@@ -17,7 +14,7 @@ class GameSettingsFaction
 	public:
 		bool spawn_weapons_unit;
 		bool spawn_weapons_gametype;
-		vector<WeaponType*> spawn_weapons_extra;
+		std::vector<WeaponType*> spawn_weapons_extra;
 
 	public:
 		GameSettingsFaction();
@@ -37,6 +34,20 @@ class GameSettings
 			firstPerson,
 			nrOfViewModes,
 		};
+
+		/**
+		* Time of day and day-night cycle
+		**/
+		float time_of_day;
+		bool day_night_cycle;
+
+		/**
+		* Amount of weather
+		**/
+		int rain_flow;
+		int snow_flow;
+		bool random_weather;
+		bool gametype_weather;
 
 	public:
 		GameSettings(int rounds = 20);

@@ -2,18 +2,21 @@
 //
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
+#include "hud.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
-#include "../rage.h"
+#include "../game_engine.h"
 #include "../game_state.h"
 #include "../entity/player.h"
 #include "../mod/weapontype.h"
-#include "hud.h"
+#include "../net/net_server.h"
+#include "hud_label.h"
 #include "render_opengl.h"
 
-#include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 #define BUFFER_MAX 50
+#define DISPLAY_TIME 1000*5;
 
 using namespace std;
 
@@ -24,22 +27,15 @@ HUD::HUD(PlayerState *ps, RenderOpenGL *render)
 	this->ps = ps;
 	this->render = render;
 	this->weapon_menu = false;
+	this->weapon_menu_remove_time = 0;
 }
 
-
-void HUD::addMessage(string text)
-{
-	HUDMessage *msg = new HUDMessage();
-	msg->text = text;
-	msg->remove_time = this->ps->st->game_time + 5000;
-	this->msgs.push_front(msg);
-}
 
 void HUD::addMessage(string text1, string text2)
 {
 	HUDMessage *msg = new HUDMessage();
 	msg->text = text1.append(text2);
-	msg->remove_time = this->ps->st->game_time + 5000;
+	msg->remove_time = this->ps->st->game_time + DISPLAY_TIME;
 	this->msgs.push_front(msg);
 }
 
@@ -47,11 +43,12 @@ void HUD::addMessage(string text1, string text2)
 /**
 * Add a data table to the HUD
 **/
-HUDLabel * HUD::addLabel(float x, float y, string data)
+HUDLabel * HUD::addLabel(int x, int y, string data, HUDLabel *l)
 {
-	HUDLabel * l = new HUDLabel(x, y, data);
-	l->width = (float) (this->render)->virt_width;
-
+	if (l == NULL) {
+		l = new HUDLabel(x, y, data);
+	}
+	l->width = this->render->virt_width;
 	this->labels.push_back(l);
 	return l;
 }
@@ -71,29 +68,32 @@ HUDLabel * HUD::addLabel(float x, float y, string data)
 **/
 void HUD::draw()
 {
-	if (this->weapon_menu && this->ps->p) {
+	glDisable(GL_DEPTH_TEST);
+
+	if (this->weapon_menu && this->ps->p != NULL) {
 		// Weapon menu
-		float x = 100;
-		float y = 100;
-		unsigned int i;
-		unsigned int num = this->ps->p->getNumWeapons();
+		if (this->weapon_menu_remove_time < ps->st->game_time) {
+			this->weapon_menu = false;
+		} else {
+			int x = 100;
+			int y = 100;
+			unsigned int num = this->ps->p->getNumWeapons();
 
-		for (i = 0; i < num; i++) {
-			WeaponType *wt = this->ps->p->getWeaponTypeAt(i);
+			for (unsigned int i = 0; i < num; i++) {
+				WeaponType *wt = this->ps->p->getWeaponTypeAt(i);
 
-			this->render->renderText(wt->title, x, y);
+				this->render->renderText(wt->title, x, y);
 
-			if (i == this->ps->p->getCurrentWeaponID()) {
-				this->render->renderText(">", x - 25.0f, y);
+				if (i == this->ps->p->getCurrentWeaponID()) {
+					this->render->renderText(">", x - 25, y);
+				}
+
+				y += 30;
 			}
-
-			y += 30.0f;
 		}
-
-
 	} else {
 		// Messages
-		float y = 1000.0f;
+		int y = this->render->virt_height;
 		for (list<HUDMessage*>::iterator it = this->msgs.begin(); it != this->msgs.end(); ++it) {
 			HUDMessage *msg = (*it);
 
@@ -102,25 +102,52 @@ void HUD::draw()
 				continue;
 			}
 
-			y -= 20.0f;
-			this->render->renderText(msg->text, 20.0f, y);
+			y -= 20;
+			this->render->renderText(msg->text, 20, y);
 		}
 
 		// Labels
+		int x;
 		for (list<HUDLabel*>::iterator it = this->labels.begin(); it != this->labels.end(); ++it) {
 			HUDLabel *l = (*it);
-			if (! l->visible) continue;
+			// Send state over network
+			if (! l->visible || l->a <= 0.001f) continue;
+			if (GEng()->server != NULL) {
+				GEng()->server->addmsgHUD(l);
+			}
 
+			x = l->x;
+			y = l->y;
+			if (x < 0) x = this->render->virt_width + x;
+			if (y < 0) y = this->render->virt_height + y;
+			
 			if (l->align == ALIGN_LEFT) {
-				this->render->renderText(l->data, l->x, l->y, l->r, l->g, l->b, l->a);
+				this->render->renderText(l->data, x, y, l->r, l->g, l->b, l->a);
 
 			} else if (l->align == ALIGN_CENTER) {
 				int w = render->widthText(l->data);
-				this->render->renderText(l->data, l->x + (l->width - w) / 2, l->y, l->r, l->g, l->b, l->a);
+				this->render->renderText(l->data, x + (l->width - w) / 2, y, l->r, l->g, l->b, l->a);
 
 			} else if (l->align == ALIGN_RIGHT) {
 				int w = render->widthText(l->data);
-				this->render->renderText(l->data, l->x + (l->width - w), l->y, l->r, l->g, l->b, l->a);
+				this->render->renderText(l->data, x + (l->width - w), y, l->r, l->g, l->b, l->a);
+
+			} else {
+				cerr << "HUD label with unknown align: " << l->align << " : " << l->data << endl;
+			}
+		}
+
+		// Workaround to remove "old" HUD labels when running as a client
+		if (GEng()->client != NULL) {
+			this->labels.clear();
+		}
+
+		// Powerup message
+		if (this->ps->p != NULL) {
+			string msg = this->ps->p->getPowerupMessage();
+			if (!msg.empty()) {
+				int w = render->widthText(msg);
+				this->render->renderText(msg, (this->render->virt_width - w) / 2, this->render->virt_height - 50, 0.8f, 0.0f, 0.0f, 1.0f);
 			}
 		}
 
@@ -154,13 +181,13 @@ void HUD::draw()
 	}
 
 	// Crosshair
-	if (this->render->viewmode == GameSettings::firstPerson && this->ps->p != NULL) {
+	if (this->ps->p != NULL && (this->render->viewmode == GameSettings::firstPerson || this->ps->p->getWeaponZoom() > 0.0f)) {
 		WeaponType* wt = this->ps->p->getWeaponTypeCurr();
 		if (wt->crosshair) {
 			int size = wt->crosshair_min;		// TODO: Make dynamic based on accuracy
 
-			int x = (int)round(((float)this->render->virt_width - (float)size) / 2.0f);
-			int y = (int)round(((float)this->render->virt_height - (float)size) / 2.0f);
+			int x = (this->render->virt_width - size) / 2;
+			int y = (this->render->virt_height - size) / 2;
 
 			glEnable(GL_BLEND);
 			glUseProgram(render->shaders[SHADER_BASIC]->p());
@@ -168,6 +195,8 @@ void HUD::draw()
 			this->render->renderSprite(wt->crosshair, x, y, size, size);
 		}
 	}
+
+	glEnable(GL_DEPTH_TEST);
 }
 
 
@@ -179,6 +208,7 @@ void HUD::eventUp()
 	if (!this->ps->p->getNumWeapons()) return;
 	this->weapon_menu = true;
 	this->ps->p->setWeapon(this->ps->p->getPrevWeaponID());
+	this->weapon_menu_remove_time = this->ps->st->game_time + DISPLAY_TIME;
 }
 
 
@@ -190,13 +220,15 @@ void HUD::eventDown()
 	if (!this->ps->p->getNumWeapons()) return;
 	this->weapon_menu = true;
 	this->ps->p->setWeapon(this->ps->p->getNextWeaponID());
+	this->weapon_menu_remove_time = this->ps->st->game_time + DISPLAY_TIME;
 }
 
 
 /**
-* Click or equivelent
+* Click or equivalent
 **/
 void HUD::eventClick()
 {
 	this->weapon_menu = false;
+	this->weapon_menu_remove_time = 0;
 }

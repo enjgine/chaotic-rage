@@ -1,0 +1,63 @@
+How to build a Debian package (deb) using the git repo as source and uploading
+it to the Chaotic Rage PPA
+
+References
+	https://help.launchpad.net/Packaging/PPA
+	http://askubuntu.com/questions/161155/how-to-create-a-ppa-for-c-program/161212#161212
+	http://faceted.wordpress.com/2011/05/18/howto-build-a-trivial-debian-package-with-dh_make/
+	http://developer.ubuntu.com/publish/apps/other-forms-of-submitting-apps/ppa/
+
+
+Install necessary packages
+	> sudo apt-get install build-essential devscripts ubuntu-dev-tools \
+	debhelper dh-make patch cdbs quilt gnupg fakeroot lintian pbuilder piuparts
+
+
+Set up gpg-key and ssh-key to be able to sign the package
+	Create a launchpad account
+	https://launchpad.net
+
+	Setup your gpg-key & ssh-key
+	https://help.launchpad.net/YourAccount/ImportingYourPGPKey
+	https://help.launchpad.net/YourAccount/CreatingAnSSHKeyPair
+
+	Set DEBEMAIL and DEBFULLNAME (optional - add these to '~/.bashrc')
+	(must be the same as the gpg key (command: 'gpg --list-keys'))
+		> export DEBEMAIL=<email address>
+		> export DEBFULLNAME="Full Name"
+
+
+Clone the git repo
+	> git clone git@github.com:TheJosh/chaotic-rage.git
+	> cd chaotic-rage
+
+
+Prepare for building the package
+	Increment the changelog with the Debian release number (edit with 'dch --edit')
+	> dch --changelog=tools/debian_package/ubuntu/changelog --increment
+	Note: Update the target (Ubuntu version) to e.g. 'trusty'.
+
+
+Build package (optional for PPA upload)
+	> make deb-ubuntu
+	The Debian package is now ready to be installed
+
+
+Build for Personal Package Archive (PPA)
+	Create brand new package since no existing version in Ubuntu's repositories
+	> make deb-ubuntu-ppa
+
+
+Test building locally
+	pbuilder allows you to build packages locally on your machine. The build
+	will be done in a minimal and clean environment. And possible to set up
+	multiple instances for various Ubuntu and Debian releases.
+
+	Set up pbuilder (only needed once per release)
+	> pbuilder-dist <release> create
+	Build a test package
+	> pbuilder-dist <release> build <package>_<version>.dsc
+
+
+Upload to the Chaotic Rage PPA
+	> dput ppa:chaotic-rage/chaoticrage <source.changes>

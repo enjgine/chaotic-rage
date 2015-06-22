@@ -33,7 +33,6 @@ class Map {
 
 	private:
 		vector<Zone*> zones;
-		float ambient[3];
 		vector<MapMesh*> meshes;
 		Render * render;
 		GameState * st;
@@ -43,11 +42,13 @@ class Map {
 	public:
 		float width;
 		float height;
+		bool weather;
 
 		vector<Heightmap*> heightmaps;
 
 		SpritePtr skybox;
 		glm::vec3 skybox_size;
+		bool skybox_inf;
 
 		float water_level;
 		SpritePtr water;

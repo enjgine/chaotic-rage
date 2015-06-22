@@ -2,15 +2,15 @@
 //
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
+#include "net_client.h"
+
 #include <iostream>
-#include <math.h>
 #include <SDL_net.h>
 
 #include "../rage.h"
 #include "../game_state.h"
 #include "../game_engine.h"
 #include "../entity/ammo_round.h"
-#include "../entity/decaying.h"
 #include "../entity/entity.h"
 #include "../entity/helicopter.h"
 #include "../entity/object.h"
@@ -21,9 +21,9 @@
 #include "../entity/wall.h"
 #include "../mod/weapontype.h"
 #include "../mod/mod_manager.h"
+#include "../render_opengl/hud_label.h"
 #include "../util/ui_update.h"
 #include "net.h"
-#include "net_client.h"
 #include "net_gameinfo.h"
 
 using namespace std;
@@ -216,6 +216,17 @@ void NetClient::preGame()
 }
 
 
+/**
+* Handle errors
+* At the moment it just logs to stderr but could possibly be more proactive
+**/
+void NetClient::error(string msg)
+{
+	cerr << msg << endl;
+}
+
+
+
 
 /**
 ***  One method for each outgoing network message the client sends out
@@ -223,63 +234,63 @@ void NetClient::preGame()
 
 void NetClient::addmsgInfoReq()
 {
-	//cout << "C INFO_REQ" << endl;
-	NetMsg * msg = new NetMsg(INFO_REQ, 0);
-	msg->seq = this->seq;
-	messages.push_back(*msg);
+	DEBUGSTR("net", "INFO_REQ");
+	NetMsg msg(INFO_REQ, 0);
+	msg.seq = this->seq;
+	messages.push_back(msg);
 }
 
 void NetClient::addmsgJoinReq()
 {
-	//cout << "C JOIN_REQ" << endl;
-	NetMsg * msg = new NetMsg(JOIN_REQ, 0);
-	msg->seq = this->seq;
-	messages.push_back(*msg);
+	DEBUGSTR("net", "JOIN_REQ");
+	NetMsg msg(JOIN_REQ, 0);
+	msg.seq = this->seq;
+	messages.push_back(msg);
 }
 
 void NetClient::addmsgJoinAck()
 {
-	//cout << "C JOIN_ACK" << endl;
-	NetMsg * msg = new NetMsg(JOIN_ACK, 0);
-	msg->seq = this->seq;
-	messages.push_back(*msg);
+	DEBUGSTR("net", "JOIN_ACK");
+	NetMsg msg(JOIN_ACK, 0);
+	msg.seq = this->seq;
+	messages.push_back(msg);
 }
 
 void NetClient::addmsgDataCompl()
 {
-	//cout << "C JOIN_DONE" << endl;
-	NetMsg * msg = new NetMsg(JOIN_DONE, 0);
-	msg->seq = this->seq;
-	messages.push_back(*msg);
+	DEBUGSTR("net", "JOIN_DONE");
+	NetMsg msg(JOIN_DONE, 0);
+	msg.seq = this->seq;
+	messages.push_back(msg);
 }
 
 void NetClient::addmsgChat()
 {
-	//cout << "C CHAT_REQ" << endl;
-	NetMsg * msg = new NetMsg(CHAT_REQ, 0);
-	msg->seq = this->seq;
-	messages.push_back(*msg);
+	DEBUGSTR("net", "CHAT_REQ");
+	NetMsg msg(CHAT_REQ, 0);
+	msg.seq = this->seq;
+	messages.push_back(msg);
 }
 
-void NetClient::addmsgKeyMouseStatus(int x, int y, int delta, Uint8 k)
+void NetClient::addmsgKeyMouseStatus(int x, int y, int delta, Uint16 k)
 {
-	//cout << "C CLIENT_STATE" << endl;
-	NetMsg * msg = new NetMsg(CLIENT_STATE, 7);
-	msg->seq = this->seq;
+	DEBUGSTR("net", "CLIENT_STATE");
+	NetMsg msg(CLIENT_STATE, 8);
+	msg.seq = this->seq;
 
-	pack(msg->data, "hhhc",
+	pack(msg.data, "hhhh",
 		(Sint16)x, (Sint16)y, (Sint16)delta, k
 	);
 
-	messages.push_back(*msg);
+	messages.push_back(msg);
 }
 
 void NetClient::addmsgQuit()
 {
-	//cout << "C QUIT_REQ" << endl;
-	NetMsg * msg = new NetMsg(QUIT_REQ, 0);
-	msg->seq = this->seq;
-	messages.push_back(*msg);
+	DEBUGSTR("net", "QUIT_REQ");
+	NetMsg msg(QUIT_REQ, 0);
+	msg.seq = this->seq;
+	messages.push_back(msg);
 
 	this->ingame = false;
 }
@@ -292,13 +303,21 @@ void NetClient::addmsgQuit()
 
 unsigned int NetClient::handleInfoResp(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleInfoResp()" << endl;
-	return 0;
+	DEBUGSTR("net", "handleInfoResp()");
+
+	char mod[128];
+	char map[128];
+
+	unpack(data, "ss",
+		&mod, &map
+	);
+
+	return strlen(mod) + 2 + strlen(map) + 2;
 }
 
 unsigned int NetClient::handleJoinAcc(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleJoinAcc()" << endl;
+	DEBUGSTR("net", "handleJoinAcc()");
 
 	unsigned int slot = 0;
 	char map[128];
@@ -309,7 +328,7 @@ unsigned int NetClient::handleJoinAcc(Uint8 *data, unsigned int size)
 
 	if (st->local_players[0]->slot == 0) {
 		st->local_players[0]->slot = slot;
-		cout << "       Our slot: " << slot << endl;
+		DEBUG("net", "  Allocated slot: %i", slot);
 	}
 
 	this->gameinfo = new NetGameinfo();
@@ -324,44 +343,67 @@ unsigned int NetClient::handleJoinAcc(Uint8 *data, unsigned int size)
 
 unsigned int NetClient::handleJoinRej(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleJoinRej()" << endl;
+	DEBUGSTR("net", "handleJoinRej()");
 	return 0;
 }
 
 unsigned int NetClient::handleDataCompl(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleDataCompl()" << endl;
+	DEBUGSTR("net", "handleDataCompl()");
 	this->ingame = true;
 	return 0;
 }
 
 unsigned int NetClient::handleChat(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleChat()" << endl;
+	DEBUGSTR("net", "handleChat()");
 	return 0;
 }
 
 unsigned int NetClient::handlePlayerDrop(Uint8 *data, unsigned int size)
 {
-	//cout << "       handlePlayerDrop()" << endl;
+	DEBUGSTR("net", "handlePlayerDrop()");
 
-	unsigned int slot = 0;
+	unsigned int slot;
 	unpack(data, "h",
 		&slot
 	);
 
+	DEBUG("net", "  Slot: %i", slot);
+
 	// Were we booted?
 	if (st->local_players[0]->slot == slot) {
 		st->gameOver();
+		DEBUGSTR("net", "  It's us :(");
 	}
 
 	return 2;
 }
 
+unsigned int NetClient::handleHUD(Uint8 *data, unsigned int size)
+{
+	DEBUGSTR("net", "handleHUD()");
+
+	int x, y;
+	float r, g, b, a;
+	HUDLabelAlign align;
+	char buffer[512];
+
+	unpack(data, "lls hffff",
+		&x, &y, &buffer,
+		&align, &r, &g, &b, &a
+	);
+
+	HUDLabel * l = new HUDLabel(x, y, string(buffer), align, r, g, b, a);
+	st->addHUDLabel(st->local_players[0]->slot, x, y, "", l);
+
+	return 4*2 + strlen(buffer)+2 + 2 + 4*4;
+}
+
 
 unsigned int NetClient::handleUnitState(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleUnitState()" << endl;
+	DEBUGSTR("net", "handleUnitState()");
 
 
 	Uint16 eid, slot;
@@ -383,17 +425,21 @@ unsigned int NetClient::handleUnitState(Uint8 *data, unsigned int size)
 
 	// If don't exist, create
 	if (u == NULL) {
-		cout << "       CREATE:" << endl;
-		cout << "       eid: " << eid << "   slot: " << slot << "   our slot: " << st->local_players[0]->slot << endl;
+		DEBUGSTR("net", "  Create unit");
+		DEBUG("net", "  eid: %i  slot: %i", eid, slot);
 
 		UnitType *ut = GEng()->mm->getUnitType(type);
-		if (! ut) return 40;	// Is this correct?
+		if (! ut) {
+			this->error("Invalid unit type " + type);
+			return 40;
+		}
 
-		u = new Player(ut, st, bx, bz, by, FACTION_INDIVIDUAL, slot);
+		u = new Player(ut, st, FACTION_INDIVIDUAL, slot, bx, by, bz);
 
 		// If the player is this client, save in the local_players obj
 		if (st->local_players[0]->slot == u->slot) {
 			st->local_players[0]->p = (Player*)u;
+			DEBUGSTR("net", "  It's us :)");
 		}
 
 		st->addUnit(u);
@@ -414,7 +460,7 @@ unsigned int NetClient::handleUnitState(Uint8 *data, unsigned int size)
 
 unsigned int NetClient::handleWallState(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleWallState()" << endl;
+	DEBUGSTR("net", "handleWallState()");
 
 
 	Uint16 eid;
@@ -433,7 +479,10 @@ unsigned int NetClient::handleWallState(Uint8 *data, unsigned int size)
 	// If don't exist, create
 	if (w == NULL) {
 		WallType *wt = GEng()->mm->getWallType(type);
-		if (! wt) return 34;		// TODO: Should we err instead?
+		if (! wt) {
+			this->error("Invalid wall type " + type);
+			return 34;
+		}
 
 		w = new Wall(wt, st, bx, bz, by, 0);
 
@@ -453,7 +502,7 @@ unsigned int NetClient::handleWallState(Uint8 *data, unsigned int size)
 
 unsigned int NetClient::handleObjectState(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleObjectState()" << endl;
+	DEBUGSTR("net", "handleObjectState()");
 
 	Uint16 eid;
 	CRC32 type;
@@ -471,9 +520,12 @@ unsigned int NetClient::handleObjectState(Uint8 *data, unsigned int size)
 	// If don't exist, create
 	if (o == NULL) {
 		ObjectType *ot = GEng()->mm->getObjectType(type);
-		if (ot == NULL) return 34;		// TODO: Should we err instead?
+		if (ot == NULL) {
+			this->error("Invalid object type " + type);
+			return 34;
+		}
 
-		o = new Object(ot, st, bx, bz, by, 0);
+		o = new Object(ot, st, bx, by, bz);
 
 		st->addObject(o);
 		o->eid = eid;
@@ -491,7 +543,7 @@ unsigned int NetClient::handleObjectState(Uint8 *data, unsigned int size)
 
 unsigned int NetClient::handleVehicleState(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleVehicleState()" << endl;
+	DEBUGSTR("net", "handleVehicleState()");
 
 	Uint16 eid;
 	CRC32 type;
@@ -511,7 +563,10 @@ unsigned int NetClient::handleVehicleState(Uint8 *data, unsigned int size)
 	// If don't exist, create
 	if (v == NULL) {
 		VehicleType *vt = GEng()->mm->getVehicleType(type);
-		if (vt == NULL) return 34;		// TODO: Should we err instead?
+		if (vt == NULL) {
+			this->error("Invalid vehicle type " + type);
+			return 34;
+		}
 
 		if (vt->helicopter) {
 			v = new Helicopter(vt, st, trans);
@@ -531,7 +586,7 @@ unsigned int NetClient::handleVehicleState(Uint8 *data, unsigned int size)
 
 unsigned int NetClient::handleAmmoroundState(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleAmmoroundState()" << endl;
+	DEBUGSTR("net", "handleAmmoroundState()");
 
 	Uint16 eid, unit_eid;
 	CRC32 type;
@@ -550,10 +605,11 @@ unsigned int NetClient::handleAmmoroundState(Uint8 *data, unsigned int size)
 	WeaponType* wt = GEng()->mm->getWeaponType(type);
 
 	// Check valid
-	if (u == NULL) return 40;
-	if (wt == NULL) return 40;
-	if (wt->model == NULL) return 40;
-
+	if (u == NULL || wt == NULL || wt->model == NULL) {
+		this->error("Invalid ammoround type " + type);
+		return 40;
+	}
+	
 	// Construct transform obj
 	btTransform xform = btTransform(
 		btQuaternion(qx, qy, qz, qw),
@@ -574,7 +630,7 @@ unsigned int NetClient::handleAmmoroundState(Uint8 *data, unsigned int size)
 
 unsigned int NetClient::handlePickupState(Uint8 *data, unsigned int size)
 {
-	//cout << "       handlePickupState()" << endl;
+	DEBUGSTR("net", "handlePickupState()");
 
 	Uint16 eid;
 	CRC32 type;
@@ -592,7 +648,10 @@ unsigned int NetClient::handlePickupState(Uint8 *data, unsigned int size)
 	// If don't exist, create
 	if (p == NULL) {
 		PickupType *pt = GEng()->mm->getPickupType(type);
-		if (pt == NULL) return 34;		// TODO: Should we err instead?
+		if (pt == NULL) {
+			this->error("Invalid pickup type " + type);
+			return 34;
+		}
 
 		p = new Pickup(pt, st, bx, bz, by);
 
@@ -612,23 +671,24 @@ unsigned int NetClient::handlePickupState(Uint8 *data, unsigned int size)
 
 unsigned int NetClient::handleEntityRem(Uint8 *data, unsigned int size)
 {
-	//cout << "       handleEntityRem()" << endl;
+	DEBUGSTR("net", "handleEntityRem()");
 
 	EID eid;
 
 	unpack(data, "h", &eid);
 
-	cout << "       REMOVE  eid: " << eid << endl;
+	DEBUG("net", "  eid: %i", eid);
 
 	// Find and remove
 	Entity *e = st->getEntity(eid);
-	if (e) {
+	if (e != NULL) {
 		e->del = true;
 	}
 
 	// Is it us? unset the player ref
 	if (e == this->st->local_players[0]->p) {
 		this->st->local_players[0]->p = NULL;
+		DEBUGSTR("net", "  It's us :(");
 	}
 
 	return 2;

@@ -5,6 +5,7 @@
 #include "unit.h"
 #include <algorithm>
 #include <BulletCollision/CollisionDispatch/btGhostObject.h>
+#include <sstream>
 #include "../audio/audio.h"
 #include "../game_engine.h"
 #include "../game_state.h"
@@ -26,23 +27,69 @@
 #include "pickup.h"
 #include "vehicle.h"
 
-class Sound;
 class btTransform;
 class btVector3;
 
 using namespace std;
 
+PickupType* Unit::initial_pickup;
 
 
-Unit::Unit(UnitType *uc, GameState *st, float x, float y, float z, Faction fac) : Entity(st)
+/**
+* Called when an animation finishes
+**/
+void unit_animation_finished(AnimPlay* play, void* data);
+
+
+/**
+* Spawn a unit at max X/Z coordinates
+* Y coordinate is calculated
+**/
+Unit::Unit(UnitType *ut, GameState *st, Faction fac, float x, float z) : Entity(st)
 {
-	this->uc = uc;
-	this->params = uc->params;
+	btTransform loc = btTransform(
+		btQuaternion(btVector3(0,0,1), 0),
+		st->physics->spawnLocation(x, z, UNIT_PHYSICS_HEIGHT)
+	);
+	
+	this->init(ut, st, fac, loc);
+}
+
+
+/**
+* Spawn a unit at specific X/Y/Z coordinates
+**/
+Unit::Unit(UnitType *ut, GameState *st, Faction fac, float x, float y, float z) : Entity(st)
+{
+	btTransform loc = btTransform(
+		btQuaternion(btVector3(0,0,1), 0),
+		btVector3(x, y, z)
+	);
+	
+	this->init(ut, st, fac, loc);
+}
+
+
+/**
+* Spawn a unit at specific X/Y/Z coordinates
+**/
+Unit::Unit(UnitType *ut, GameState *st, Faction fac, btTransform & loc) : Entity(st)
+{
+	this->init(ut, st, fac, loc);
+}
+
+
+/**
+* All the init for a unit
+**/
+void Unit::init(UnitType *ut, GameState *st, Faction fac, btTransform & loc)
+{
+	this->uc = ut;
+	this->params = ut->params;
 	this->slot = 0;
 	this->fac = fac;
 
-	this->health = uc->begin_health;
-	this->remove_at = 0;
+	this->health = ut->begin_health;
 
 	this->weapon = NULL;
 	this->firing = false;
@@ -51,36 +98,46 @@ Unit::Unit(UnitType *uc, GameState *st, float x, float y, float z, Faction fac) 
 	this->special_firing = false;
 	this->special_time = 0;
 	this->special_cooldown = 0;
+	this->weapon_zoom_level = 0;
+	this->powerup_weapon = NULL;
+	this->active = false;
 
 	this->lift_obj = NULL;
 	this->drive = NULL;
 	this->force = btVector3(0.0f, 0.0f, 0.0f);
 
+	this->resetIdleTime();
+
 	this->anim = new AnimPlay(this->uc->model);
+
+	glm::vec3 translate(0.0f, UNIT_PHYSICS_HEIGHT/-2.0f, 0.0f);
+	this->anim->setCustomTransform(translate);
+
+	if (uc->node_head) {
+		this->anim->addMoveNode(uc->node_head);
+	}
+
 	st->addAnimPlay(this->anim, this);
 
 	// Set animation
-	UnitTypeAnimation* uta = this->uc->getAnimation(UNIT_ANIM_STATIC);
+	UnitTypeAnimation* uta = this->uc->getAnimation(UNIT_ANIM_SPAWN);
 	if (uta) {
-		this->anim->setAnimation(uta->animation, uta->start_frame, uta->end_frame, uta->loop);
+		this->anim->setAnimation(uta->animation, uta->start_frame, uta->end_frame);
+		this->anim->setEndedCallback(unit_animation_finished, (void*)this);
+	} else {
+		this->animationFinished();
 	}
-
-	// Ghost position
-	btTransform xform = btTransform(
-		btQuaternion(btVector3(0,0,1), 0),
-		st->physics->spawnLocation(x, y, 0.9f)
-	);
 
 	// Create ghost
 	this->ghost = new btPairCachingGhostObject();
-	this->ghost->setWorldTransform(xform);
-	this->ghost->setCollisionShape(uc->col_shape);
+	this->ghost->setWorldTransform(loc);
+	this->ghost->setCollisionShape(ut->col_shape);
 	this->ghost->setCollisionFlags(btCollisionObject::CF_KINEMATIC_OBJECT);
 	this->ghost->setUserPointer(this);
 
 	// Create Kinematic Character Controller
 	btScalar stepHeight = btScalar(0.25);
-	this->character = new btCRKinematicCharacterController(this->ghost, uc->col_shape, stepHeight);
+	this->character = new btCRKinematicCharacterController(this->ghost, ut->col_shape, stepHeight);
 
 	// Add character and ghost to the world
 	st->physics->addCollisionObject(this->ghost, CG_UNIT);
@@ -92,6 +149,23 @@ Unit::Unit(UnitType *uc, GameState *st, float x, float y, float z, Faction fac) 
 		this->pickupWeapon(spawn->at(i));
 	}
 	delete(spawn);
+
+	// Create the initial pickup used for invinciblity
+	if (! Unit::initial_pickup) {
+		Unit::initial_pickup = new PickupType();
+		Unit::initial_pickup->type = PICKUP_TYPE_POWERUP;
+		Unit::initial_pickup->perm = new PickupTypeAdjust();
+		Unit::initial_pickup->temp = new PickupTypeAdjust();
+		Unit::initial_pickup->temp->invincible = true;
+	}
+
+	// Make them invincible for a little while
+	Unit::initial_pickup->doUse(this);
+	UnitPickup up;
+	up.pt = Unit::initial_pickup;
+	up.u = this;
+	up.end_time = st->game_time + 2500;
+	pickups.push_back(up);
 
 	this->body = NULL;
 }
@@ -111,6 +185,31 @@ Unit::~Unit()
 
 
 /**
+* An animation has finished
+**/
+void unit_animation_finished(AnimPlay* play, void* data)
+{
+	static_cast<Unit*>(data)->animationFinished();
+}
+
+
+/**
+* Spawn animation has finished - begin the walk animation
+**/
+void Unit::animationFinished()
+{
+	this->anim->setEndedCallback(NULL);
+
+	UnitTypeAnimation* uta = this->uc->getAnimation(UNIT_ANIM_STATIC);
+	if (uta) {
+		this->anim->setAnimation(uta->animation, uta->start_frame, uta->end_frame, true);
+	}
+
+	this->active = true;
+}
+
+
+/**
 * Set the firing flag and start playing sfx
 **/
 void Unit::beginFiring()
@@ -119,12 +218,12 @@ void Unit::beginFiring()
 
 	this->firing = true;
 
-	Sound* snd = this->weapon->wt->getSound(WEAPON_SOUND_BEGIN);
+	AudioPtr snd = this->weapon->wt->getSound(WEAPON_SOUND_BEGIN);
 	GEng()->audio->playSound(snd, false, this);
 
 	// TODO: This should only be after the WEAPON_SOUND_BEGIN sound has finished...
 	if (this->weapon->wt->continuous) {
-		Sound* snd = this->weapon->wt->getSound(WEAPON_SOUND_REPEAT);
+		AudioPtr snd = this->weapon->wt->getSound(WEAPON_SOUND_REPEAT);
 		weapon_sound = GEng()->audio->playSound(snd, this->weapon->wt->continuous, this);
 	}
 }
@@ -143,14 +242,13 @@ void Unit::endFiring()
 		GEng()->audio->stopSound(this->weapon_sound);
 	}
 
-	Sound* snd = this->weapon->wt->getSound(WEAPON_SOUND_END);
+	AudioPtr snd = this->weapon->wt->getSound(WEAPON_SOUND_END);
 	GEng()->audio->playSound(snd, false, this);
 }
 
 
 /**
 * Play the sound of an empty weapon trying to fire
-* TODO: Fix this and get it working
 **/
 void Unit::emptySound()
 {
@@ -159,8 +257,17 @@ void Unit::emptySound()
 	GEng()->audio->stopSound(this->weapon_sound);
 
 	// TODO: Fix this
-	//Sound* snd = this->weapon->wt->getSound(WEAPON_SOUND_EMPTY);
+	//AudioPtr snd = this->weapon->wt->getSound(WEAPON_SOUND_EMPTY);
 	//GEng()->audio->playSound(snd, true, this);
+}
+
+
+/**
+* Play a sound while walking
+**/
+void Unit::walkSound()
+{
+	// TODO: Implement this
 }
 
 
@@ -181,12 +288,11 @@ Entity * Unit::raytest(btMatrix3x3 &direction, float range)
 {
 	btTransform xform = this->ghost->getWorldTransform();
 
-	btVector3 offGround = btVector3(0.0f, 0.4f, 0.0f);
+	btVector3 offGround = btVector3(0.0f, 0.3f, 0.0f);
 
 	// Begin and end vectors
 	btVector3 begin = xform.getOrigin() + offGround;
 	btVector3 end = begin + offGround + direction * btVector3(0.0f, 0.0f, range);
-	st->addDebugLine(&begin, &end);
 
 	// Do the rayTest
 	btCollisionWorld::ClosestRayResultCallback cb(begin, end);
@@ -236,14 +342,14 @@ void Unit::meleeAttack(btMatrix3x3 &direction)
 
 	// TODO: should we hack the direction to only allow X degrees of freedom in front of the unit?
 
-	Entity *e = this->raytest(direction, 5.0f);	// TODO: unit settings (melee range)
+	Entity *e = this->raytest(direction, this->params.melee_range);
 	if (e == NULL) return;
 
 	DEBUG("weap", "%p meleeAttack; ray hit %p", this, e);
 
-	if (e->klass() == UNIT) {
-		(static_cast<Unit*>(e))->takeDamage(this->params.melee_damage);
-	}
+	e->takeDamage(this->params.melee_damage);
+
+	this->resetIdleTime();
 }
 
 
@@ -316,7 +422,34 @@ bool Unit::pickupAmmo(WeaponType* wt)
 
 
 /**
-* Return the unber of weapons currently in posession
+* Loop through weapon zoom levels and display current zoom level
+**/
+void Unit::zoomWeapon()
+{
+	if (this->weapon == NULL) return;
+
+	this->weapon_zoom_level++;
+	this->weapon_zoom_level %= this->weapon->wt->zoom_levels.size();
+
+	ostringstream ss;
+	ss << this->getWeaponZoom();
+	string s(ss.str());
+	this->st->addHUDMessage(this->slot, "Weapon zoom: " + s);
+}
+
+
+/**
+* Get the current zoom amount in metres
+**/
+float Unit::getWeaponZoom()
+{
+	if (this->weapon == NULL) return 0.0f;
+	return this->weapon->wt->zoom_levels[this->weapon_zoom_level];
+}
+
+
+/**
+* Return the number of weapons currently in posession
 **/
 unsigned int Unit::getNumWeapons()
 {
@@ -362,6 +495,7 @@ void Unit::setWeapon(int id)
 
 	this->weapon = uw;
 	this->firing = false;
+	this->weapon_zoom_level = 0;
 
 	curr_weapon_id = id;
 }
@@ -438,16 +572,6 @@ float Unit::getHealthPercent()
 
 
 /**
-* Get the current sound
-* TODO: Remove - not in use...?
-**/
-Sound* Unit::getSound()
-{
-	return NULL;
-}
-
-
-/**
 * Removes any pickups which are due to finish,
 * and runs their finished() method.
 **/
@@ -483,14 +607,12 @@ void Unit::setTransform(btTransform &t) {
 **/
 void Unit::update(int delta)
 {
-	if (remove_at != 0) {
-		if (remove_at <= st->game_time) this->del = 1;
-		return;
-	}
-
 	if (GEng()->server != NULL) {
 		GEng()->server->addmsgUnitState(this);
 	}
+
+	// Units are not active until spawn animation has finished
+	if (!this->active) return;
 
 	// If in a vehicle, move the ghost to AIs know where the unit is
 	if (this->drive) {
@@ -500,9 +622,8 @@ void Unit::update(int delta)
 	// If they have fallen a considerable distance, they die
 	btTransform xform = ghost->getWorldTransform();
 	if (xform.getOrigin().y() <= -100.0) {
-		this->takeDamage(this->health);
+		this->die();
 	}
-
 
 	// Which weapon to use?
 	WeaponType *w = NULL;
@@ -512,6 +633,9 @@ void Unit::update(int delta)
 			w = this->drive->vt->weapon_primary;
 			wxform = btTransform();
 			this->drive->getWeaponTransform(wxform);
+		} else if (this->powerup_weapon != NULL) {
+			w = this->powerup_weapon;
+			wxform = btTransform(xform);
 		} else if (this->weapon && this->weapon->next_use < st->game_time && this->weapon->magazine > 0) {
 			w = this->weapon->wt;
 			wxform = btTransform(xform);
@@ -520,25 +644,21 @@ void Unit::update(int delta)
 
 	// Fire!
 	if (w != NULL) {
-		w->doFire(this, wxform);
+		w->doFire(this, wxform, this->params.weapon_damage);
 
 		if (w == this->weapon->wt) {
 			this->weapon->next_use = st->game_time + this->weapon->wt->fire_delay;
 
 			this->weapon->magazine--;
 			if (this->weapon->magazine == 0 && this->weapon->belt > 0) {
-				int load = this->weapon->wt->magazine_limit;
-				if (load > this->weapon->belt) load = this->weapon->belt;
-				this->weapon->magazine = load;
-				this->weapon->belt -= load;
-				this->weapon->next_use += this->weapon->wt->reload_delay;
-				this->weapon->reloading = true;
-				this->endFiring();
+				this->reload();
 				this->emptySound();
 			}
 		}
 
 		if (! w->continuous) this->endFiring();
+
+		this->resetIdleTime();
 	}
 
 	// Reset the 'reloading' flag if enough time has passed
@@ -558,11 +678,13 @@ void Unit::update(int delta)
 	if (special_firing) {
 		w = this->uc->special_weapon;
 
-		w->doFire(this, xform);
+		w->doFire(this, xform, 1.0f);
 
 		if (!w->continuous || st->game_time > this->special_time) {
 			this->endSpecialAttack();
 		}
+
+		this->resetIdleTime();
 	}
 
 	// Iterate through the physics pairs to see if there are any Pickups to pick up.
@@ -594,13 +716,7 @@ void Unit::update(int delta)
 
 				if (other->getBroadphaseHandle()->m_collisionFilterGroup == CG_PICKUP) {
 					Pickup* p = static_cast<Pickup*>(other->getUserPointer());
-					if (p->doUse(this)) {
-						UnitPickup up;
-						up.pt = p->getPickupType();
-						up.u = this;
-						up.end_time = st->game_time + up.pt->getDelay();
-						pickups.push_back(up);
-					}
+					p->doUse(this);
 				}
 			}
 		}
@@ -608,41 +724,100 @@ void Unit::update(int delta)
 
 	// Remove (and rollback) old pickups
 	pickups.remove_if(remove_finished_pickup);
+	if (pickups.empty()) {
+		this->powerup_weapon = NULL;
+		this->powerup_message = "";
+	}
+
+	// If too much time has passed, play idle sound
+	if (this->idle_sound_time < st->game_time && st->getLocalPlayer(this->slot) == NULL) {
+		AudioPtr snd = this->uc->getSound(UNIT_SOUND_STATIC);
+		if (snd) {
+			GEng()->audio->playSound(snd, false, this);
+		}
+		this->resetIdleTime();
+	}
+}
+
+
+
+/*
+* Reload weapon.
+* All ammo in the magazine will be lost, unless magazine is full or belt empty.
+*/
+void Unit::reload()
+{
+	if (this->weapon->belt <= 0) return;
+	if (this->weapon->wt->magazine_limit == this->weapon->magazine) return;
+
+	int load = this->weapon->wt->magazine_limit;
+	if (load > this->weapon->belt) load = this->weapon->belt;
+	this->weapon->magazine = load;
+	this->weapon->belt -= load;
+	this->weapon->next_use += this->weapon->wt->reload_delay;
+	this->weapon->reloading = true;
+	this->endFiring();
+}
+
+
+/**
+* Reset the idle timer
+**/
+void Unit::resetIdleTime()
+{
+	this->idle_sound_time = st->game_time + 15000;
 }
 
 
 /**
 * We have been hit! Take some damage
 **/
-int Unit::takeDamage(float damage)
+void Unit::takeDamage(float damage)
 {
+	if (this->params.invincible) {
+		return;
+	}
+
 	this->health -= damage;
 
 	btTransform xform = this->ghost->getWorldTransform();
 	create_particles_blood_spray(this->st, xform.getOrigin(), damage);
 
-	this->st->increaseEntropy(1);
+	if (this->health <= 0 && this->del == false) {
+		this->die();
+	}
+}
 
-	if (this->health <= 0 && remove_at == 0) {
-		this->endFiring();
-		this->leaveVehicle();
 
-		// Play a death animation
-		UnitTypeAnimation* uta = this->uc->getAnimation(UNIT_ANIM_DEATH);
-		if (uta) {
-			this->anim->setAnimation(uta->animation, uta->start_frame, uta->end_frame, uta->loop);
-		}
+/**
+* The unit has died
+**/
+void Unit::die()
+{
+	this->endFiring();
+	this->leaveVehicle();
 
-		// Fling some body parts around
-		if (!this->uc->death_debris.empty()) {
-			this->st->scatterDebris(this, 3, 5.0f, &this->uc->death_debris);
-		}
+	// Remove move nodes so they can be animated
+	this->anim->removeMoveNode(uc->node_head);
 
-		this->st->deadButNotBuried(this, this->anim);
-		return 1;
+	// Play a death animation
+	UnitTypeAnimation* uta = this->uc->getAnimation(UNIT_ANIM_DEATH);
+	if (uta) {
+		this->anim->setAnimation(uta->animation, uta->start_frame, uta->end_frame, uta->loop);
 	}
 
-	return 0;
+	// Play death sound
+	AudioPtr snd = this->uc->getSound(UNIT_SOUND_DEATH);
+	if (snd) {
+		GEng()->audio->playSound(snd, false, this);
+	}
+
+	// Fling some body parts around
+	if (!this->uc->death_debris.empty()) {
+		this->st->scatterDebris(this, 3, 5.0f, &this->uc->death_debris);
+	}
+
+	this->st->deadButNotBuried(this, this->anim);
 }
 
 
@@ -694,6 +869,38 @@ void Unit::leaveVehicle()
 
 
 /**
+* Add a pickup to the 'active' list for this unit
+**/
+void Unit::addActivePickup(PickupType* pt)
+{
+	UnitPickup up;
+	up.pt = pt;
+	up.u = this;
+	up.end_time = st->game_time + pt->getDelay();
+	this->pickups.push_back(up);
+
+	if (pt->wt != NULL) {
+		this->powerup_weapon = pt->wt;
+	}
+	if (!pt->message.empty()) {
+		this->powerup_message = pt->message;
+	}
+}
+
+
+/**
+* Does the uint currently have the given pickup?
+**/
+bool Unit::hasActivePickup(PickupType* pt)
+{
+	for (list<UnitPickup>::iterator it = this->pickups.begin(); it != this->pickups.end(); ++it) {
+		if ((*it).pt == pt) return true;
+	}
+	return false;
+}
+
+
+/**
 * Use an object
 **/
 void Unit::doUse()
@@ -722,7 +929,7 @@ void Unit::doUse()
 		}
 
 		if (ot->add_object.length() != 0) {
-			Object *nu = new Object(GEng()->mm->getObjectType(ot->add_object), this->st, trans.getOrigin().getX(), trans.getOrigin().getY(), trans.getOrigin().getZ(), trans.getRotation().getZ());
+			Object *nu = new Object(GEng()->mm->getObjectType(ot->add_object), this->st, trans.getOrigin().getX(), trans.getOrigin().getY(), trans.getOrigin().getZ());
 			this->st->addObject(nu);
 		}
 
@@ -791,12 +998,17 @@ void Unit::doDrop()
 void Unit::applyPickupAdjust(PickupTypeAdjust* adj)
 {
 	this->health *= adj->health;
-	this->takeDamage(0);		// check the player isn't dead.
+	this->takeDamage(0.0f);		// check the player isn't dead.
 
 	this->params.max_speed *= adj->max_speed;
 	this->params.melee_damage *= adj->melee_damage;
 	this->params.melee_delay *= adj->melee_delay;
 	this->params.melee_cooldown *= adj->melee_cooldown;
+	this->params.weapon_damage *= adj->weapon_damage;
+
+	if (adj->invincible) {
+		this->params.invincible = true;
+	}
 }
 
 
@@ -806,12 +1018,17 @@ void Unit::applyPickupAdjust(PickupTypeAdjust* adj)
 void Unit::rollbackPickupAdjust(PickupTypeAdjust* adj)
 {
 	this->health /= adj->health;
-	this->takeDamage(0);		// check the player isn't dead.
+	this->takeDamage(0.0f);		// check the player isn't dead.
 
 	this->params.max_speed /= adj->max_speed;
 	this->params.melee_damage /= adj->melee_damage;
 	this->params.melee_delay /= adj->melee_delay;
 	this->params.melee_cooldown /= adj->melee_cooldown;
+	this->params.weapon_damage /= adj->weapon_damage;
+
+	if (adj->invincible) {
+		this->params.invincible = false;
+	}
 }
 
 

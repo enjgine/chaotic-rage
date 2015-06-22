@@ -48,7 +48,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
-      <AdditionalIncludeDirectories>../windows/include;../windows/include/bullet;../windows/getopt_long;../include;../../src/;../../src/guichan;../../src/confuse;../../src/spark</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../windows/include;../windows/include/bullet;../windows/getopt_long;../include;../../src/;../../src/guichan;../../src/confuse;../../src/spark;../../src/lua</AdditionalIncludeDirectories>
       <CompileAsManaged>false</CompileAsManaged>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
@@ -66,7 +66,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>../windows/lib;../windows/lib-bullet</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_image.lib;SDL2_mixer.lib;SDL2_net.lib;opengl32.lib;glu32.lib;glew32.lib;zdll.lib;lua5.1.lib;freetype.lib;BulletDynamics.lib;BulletCollision.lib;LinearMath.lib;assimp.lib;Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_image.lib;SDL2_mixer.lib;SDL2_net.lib;opengl32.lib;glu32.lib;glew32.lib;zdll.lib;freetype.lib;BulletDynamics.lib;BulletCollision.lib;LinearMath.lib;assimp.lib;Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <IgnoreSpecificDefaultLibraries>MSVCRTD.LIB;MSVCRT100D.LIB</IgnoreSpecificDefaultLibraries>
     </Link>
@@ -101,6 +101,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="..\..\CHANGES" />
     <None Include="..\..\data\cr\ais\dumbo.lua" />
     <None Include="..\..\data\cr\ais\human.lua" />
     <None Include="..\..\data\cr\ais\zombie.lua" />
@@ -116,36 +117,30 @@
     <None Include="..\..\data\cr\gametypes\zombies.lua" />
     <None Include="..\..\data\cr\gametypes\zombies2.lua" />
     <None Include="..\..\data\cr\gametypes\zombie_betrayal.lua" />
+    <None Include="..\..\data\cr\mod.conf" />
     <None Include="..\..\data\cr\objecttypes.conf" />
     <None Include="..\..\data\cr\particlegenerators.conf" />
     <None Include="..\..\data\cr\particletypes.conf" />
     <None Include="..\..\data\cr\pickuptypes.conf" />
-    <None Include="..\..\data\cr\shaders_gl\bones.glslf" />
-    <None Include="..\..\data\cr\shaders_gl\bones.glslv" />
-    <None Include="..\..\data\cr\shaders_gl\dissolve.glslf" />
-    <None Include="..\..\data\cr\shaders_gl\dissolve.glslv" />
-    <None Include="..\..\data\cr\shaders_gl\entities.glslf" />
-    <None Include="..\..\data\cr\shaders_gl\entities.glslv" />
-    <None Include="..\..\data\cr\shaders_gl\particles.glslf" />
-    <None Include="..\..\data\cr\shaders_gl\particles.glslv" />
     <None Include="..\..\data\cr\shaders_gl\phong.glslf" />
-    <None Include="..\..\data\cr\shaders_gl\phong.glslv" />
+    <None Include="..\..\data\cr\shaders_gl\phong_bones.glslv" />
     <None Include="..\..\data\cr\shaders_gl\phong_bump.glslf" />
-    <None Include="..\..\data\cr\shaders_gl\phong_bump.glslv" />
+    <None Include="..\..\data\cr\shaders_gl\phong_shadow.glslf" />
+    <None Include="..\..\data\cr\shaders_gl\phong_static.glslv" />
     <None Include="..\..\data\cr\shaders_gl\skybox.glslf" />
     <None Include="..\..\data\cr\shaders_gl\skybox.glslv" />
-    <None Include="..\..\data\cr\shaders_gl\terrain.glslf" />
-    <None Include="..\..\data\cr\shaders_gl\terrain.glslv" />
     <None Include="..\..\data\cr\shaders_gl\text.glslf" />
     <None Include="..\..\data\cr\shaders_gl\text.glslv" />
     <None Include="..\..\data\cr\shaders_gl\water.glslf" />
     <None Include="..\..\data\cr\shaders_gl\water.glslv" />
     <None Include="..\..\data\cr\songs.conf" />
-    <None Include="..\..\data\cr\sounds.conf" />
     <None Include="..\..\data\cr\unittypes.conf" />
     <None Include="..\..\data\cr\vehicletypes.conf" />
     <None Include="..\..\data\cr\walltypes.conf" />
     <None Include="..\..\data\cr\weapontypes.conf" />
+    <None Include="..\..\data\test\campaigns.conf" />
+    <None Include="..\..\data\test\gametypes.conf" />
+    <None Include="..\..\data\test\mod.conf" />
     <None Include="..\..\src\i18n\en.txt" />
     <None Include="..\..\src\i18n\en_Pirate.txt" />
   </ItemGroup>
@@ -171,6 +166,7 @@
     <ClCompile Include="..\..\src\entity\wall.cpp" />
     <ClCompile Include="..\..\src\events.cpp" />
     <ClCompile Include="..\..\src\fx\newparticle.cpp" />
+    <ClCompile Include="..\..\src\fx\weather.cpp" />
     <ClCompile Include="..\..\src\game_settings.cpp" />
     <ClCompile Include="..\..\src\game_state.cpp" />
     <ClCompile Include="..\..\src\game_engine.cpp" />
@@ -227,10 +223,12 @@
     <ClCompile Include="..\..\src\gui\client_settings.cpp" />
     <ClCompile Include="..\..\src\gui\controls.cpp" />
     <ClCompile Include="..\..\src\gui\dialog.cpp" />
+    <ClCompile Include="..\..\src\gui\listprompt.cpp" />
     <ClCompile Include="..\..\src\gui\mods.cpp" />
     <ClCompile Include="..\..\src\gui\network.cpp" />
     <ClCompile Include="..\..\src\gui\newcampaign.cpp" />
     <ClCompile Include="..\..\src\gui\newgame.cpp" />
+    <ClCompile Include="..\..\src\gui\newgame_environment.cpp" />
     <ClCompile Include="..\..\src\gui\newgame_weapons.cpp" />
     <ClCompile Include="..\..\src\gui\textbox.cpp" />
     <ClCompile Include="..\..\src\gui\textprompt.cpp" />
@@ -239,11 +237,43 @@
     <ClCompile Include="..\..\src\http\serverlist.cpp" />
     <ClCompile Include="..\..\src\http\url.cpp" />
     <ClCompile Include="..\..\src\i18n\gettext.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_dialog_lib.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_entity_lib.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_physics_lib.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_random_lib.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_world_lib.cpp" />
+    <ClCompile Include="..\..\src\lua\lapi.c" />
+    <ClCompile Include="..\..\src\lua\lauxlib.c" />
+    <ClCompile Include="..\..\src\lua\lbaselib.c" />
+    <ClCompile Include="..\..\src\lua\lbitlib.c" />
+    <ClCompile Include="..\..\src\lua\lcode.c" />
+    <ClCompile Include="..\..\src\lua\lcorolib.c" />
+    <ClCompile Include="..\..\src\lua\lctype.c" />
+    <ClCompile Include="..\..\src\lua\ldblib.c" />
+    <ClCompile Include="..\..\src\lua\ldebug.c" />
+    <ClCompile Include="..\..\src\lua\ldo.c" />
+    <ClCompile Include="..\..\src\lua\ldump.c" />
+    <ClCompile Include="..\..\src\lua\lfunc.c" />
+    <ClCompile Include="..\..\src\lua\lgc.c" />
+    <ClCompile Include="..\..\src\lua\linit.c" />
+    <ClCompile Include="..\..\src\lua\liolib.c" />
+    <ClCompile Include="..\..\src\lua\llex.c" />
+    <ClCompile Include="..\..\src\lua\lmathlib.c" />
+    <ClCompile Include="..\..\src\lua\lmem.c" />
+    <ClCompile Include="..\..\src\lua\loadlib.c" />
+    <ClCompile Include="..\..\src\lua\lobject.c" />
+    <ClCompile Include="..\..\src\lua\lopcodes.c" />
+    <ClCompile Include="..\..\src\lua\loslib.c" />
+    <ClCompile Include="..\..\src\lua\lparser.c" />
+    <ClCompile Include="..\..\src\lua\lstate.c" />
+    <ClCompile Include="..\..\src\lua\lstring.c" />
+    <ClCompile Include="..\..\src\lua\lstrlib.c" />
+    <ClCompile Include="..\..\src\lua\ltable.c" />
+    <ClCompile Include="..\..\src\lua\ltablib.c" />
+    <ClCompile Include="..\..\src\lua\ltm.c" />
+    <ClCompile Include="..\..\src\lua\lundump.c" />
+    <ClCompile Include="..\..\src\lua\lvm.c" />
+    <ClCompile Include="..\..\src\lua\lzio.c" />
+    <ClCompile Include="..\..\src\script\lua_dialog_lib.cpp" />
+    <ClCompile Include="..\..\src\script\lua_entity_lib.cpp" />
+    <ClCompile Include="..\..\src\script\lua_physics_lib.cpp" />
+    <ClCompile Include="..\..\src\script\lua_random_lib.cpp" />
+    <ClCompile Include="..\..\src\script\lua_world_lib.cpp" />
     <ClCompile Include="..\..\src\map\heightmap.cpp" />
     <ClCompile Include="..\..\src\map\map.cpp" />
     <ClCompile Include="..\..\src\map\mesh.cpp" />
@@ -252,12 +282,13 @@
     <ClCompile Include="..\..\src\render\render_ascii.cpp" />
     <ClCompile Include="..\..\src\render_opengl\guichan_font.cpp" />
     <ClCompile Include="..\..\src\render_opengl\intro.cpp" />
-    <ClCompile Include="..\..\src\lua\ailogic.cpp" />
-    <ClCompile Include="..\..\src\lua\gamelogic.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_hudlabel_lib.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_standard.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_unitinfo_lib.cpp" />
-    <ClCompile Include="..\..\src\lua\lua_vector3_lib.cpp" />
+    <ClCompile Include="..\..\src\script\ailogic.cpp" />
+    <ClCompile Include="..\..\src\script\gamelogic.cpp" />
+    <ClCompile Include="..\..\src\script\lua_hudlabel_lib.cpp" />
+    <ClCompile Include="..\..\src\script\lua_standard.cpp" />
+    <ClCompile Include="..\..\src\script\lua_unitinfo_lib.cpp" />
+    <ClCompile Include="..\..\src\script\lua_vector3_lib.cpp" />
+    <ClCompile Include="..\..\src\render_opengl\light.cpp" />
     <ClCompile Include="..\..\src\render_opengl\menu.cpp" />
     <ClCompile Include="..\..\src\mod\aitype.cpp" />
     <ClCompile Include="..\..\src\mod\campaign.cpp" />
@@ -269,7 +300,6 @@
     <ClCompile Include="..\..\src\mod\objecttype.cpp" />
     <ClCompile Include="..\..\src\mod\pickuptype.cpp" />
     <ClCompile Include="..\..\src\mod\song.cpp" />
-    <ClCompile Include="..\..\src\mod\sound.cpp" />
     <ClCompile Include="..\..\src\mod\unittype.cpp" />
     <ClCompile Include="..\..\src\mod\vehicletype.cpp" />
     <ClCompile Include="..\..\src\mod\walltype.cpp" />
@@ -327,12 +357,8 @@
     <ClCompile Include="..\..\src\spark\Extensions\Zones\SPK_Point.cpp" />
     <ClCompile Include="..\..\src\spark\Extensions\Zones\SPK_Ring.cpp" />
     <ClCompile Include="..\..\src\spark\Extensions\Zones\SPK_Sphere.cpp" />
+    <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GL2LineRenderer.cpp" />
     <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GL2PointRenderer.cpp" />
-    <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLExtHandler.cpp" />
-    <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLLineRenderer.cpp" />
-    <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLLineTrailRenderer.cpp" />
-    <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLPointRenderer.cpp" />
-    <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLQuadRenderer.cpp" />
     <ClCompile Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLRenderer.cpp" />
     <ClCompile Include="..\..\src\util\btCRKinematicCharacterController.cpp" />
     <ClCompile Include="..\..\src\util\btStrideHeightfieldTerrainShape.cpp" />
@@ -372,6 +398,7 @@
     <ClInclude Include="..\..\src\entity\vehicle.h" />
     <ClInclude Include="..\..\src\entity\wall.h" />
     <ClInclude Include="..\..\src\fx\newparticle.h" />
+    <ClInclude Include="..\..\src\fx\weather.h" />
     <ClInclude Include="..\..\src\game.h" />
     <ClInclude Include="..\..\src\game_settings.h" />
     <ClInclude Include="..\..\src\game_state.h" />
@@ -447,10 +474,12 @@
     <ClInclude Include="..\..\src\gui\client_settings.h" />
     <ClInclude Include="..\..\src\gui\controls.h" />
     <ClInclude Include="..\..\src\gui\dialog.h" />
+    <ClInclude Include="..\..\src\gui\listprompt.h" />
     <ClInclude Include="..\..\src\gui\mods.h" />
     <ClInclude Include="..\..\src\gui\network.h" />
     <ClInclude Include="..\..\src\gui\newcampaign.h" />
     <ClInclude Include="..\..\src\gui\newgame.h" />
+    <ClInclude Include="..\..\src\gui\newgame_environment.h" />
     <ClInclude Include="..\..\src\gui\newgame_weapons.h" />
     <ClInclude Include="..\..\src\gui\textbox.h" />
     <ClInclude Include="..\..\src\gui\textprompt.h" />
@@ -459,6 +488,30 @@
     <ClInclude Include="..\..\src\http\serverlist.h" />
     <ClInclude Include="..\..\src\http\url.h" />
     <ClInclude Include="..\..\src\i18n\gettext.h" />
+    <ClInclude Include="..\..\src\lua\lapi.h" />
+    <ClInclude Include="..\..\src\lua\lauxlib.h" />
+    <ClInclude Include="..\..\src\lua\lcode.h" />
+    <ClInclude Include="..\..\src\lua\lctype.h" />
+    <ClInclude Include="..\..\src\lua\ldebug.h" />
+    <ClInclude Include="..\..\src\lua\ldo.h" />
+    <ClInclude Include="..\..\src\lua\lfunc.h" />
+    <ClInclude Include="..\..\src\lua\lgc.h" />
+    <ClInclude Include="..\..\src\lua\llex.h" />
+    <ClInclude Include="..\..\src\lua\llimits.h" />
+    <ClInclude Include="..\..\src\lua\lmem.h" />
+    <ClInclude Include="..\..\src\lua\lobject.h" />
+    <ClInclude Include="..\..\src\lua\lopcodes.h" />
+    <ClInclude Include="..\..\src\lua\lparser.h" />
+    <ClInclude Include="..\..\src\lua\lstate.h" />
+    <ClInclude Include="..\..\src\lua\lstring.h" />
+    <ClInclude Include="..\..\src\lua\ltable.h" />
+    <ClInclude Include="..\..\src\lua\ltm.h" />
+    <ClInclude Include="..\..\src\lua\lua.h" />
+    <ClInclude Include="..\..\src\lua\luaconf.h" />
+    <ClInclude Include="..\..\src\lua\lualib.h" />
+    <ClInclude Include="..\..\src\lua\lundump.h" />
+    <ClInclude Include="..\..\src\lua\lvm.h" />
+    <ClInclude Include="..\..\src\lua\lzio.h" />
     <ClInclude Include="..\..\src\map\heightmap.h" />
     <ClInclude Include="..\..\src\map\map.h" />
     <ClInclude Include="..\..\src\map\mesh.h" />
@@ -467,10 +520,11 @@
     <ClInclude Include="..\..\src\render\render_ascii.h" />
     <ClInclude Include="..\..\src\render_opengl\guichan_font.h" />
     <ClInclude Include="..\..\src\render_opengl\intro.h" />
-    <ClInclude Include="..\..\src\lua\ailogic.h" />
-    <ClInclude Include="..\..\src\lua\gamelogic.h" />
-    <ClInclude Include="..\..\src\lua\luatimer.h" />
-    <ClInclude Include="..\..\src\lua\lua_libs.h" />
+    <ClInclude Include="..\..\src\script\ailogic.h" />
+    <ClInclude Include="..\..\src\script\gamelogic.h" />
+    <ClInclude Include="..\..\src\script\luatimer.h" />
+    <ClInclude Include="..\..\src\script\lua_libs.h" />
+    <ClInclude Include="..\..\src\render_opengl\light.h" />
     <ClInclude Include="..\..\src\render_opengl\menu.h" />
     <ClInclude Include="..\..\src\mod\aitype.h" />
     <ClInclude Include="..\..\src\mod\campaign.h" />
@@ -482,7 +536,6 @@
     <ClInclude Include="..\..\src\mod\objecttype.h" />
     <ClInclude Include="..\..\src\mod\pickuptype.h" />
     <ClInclude Include="..\..\src\mod\song.h" />
-    <ClInclude Include="..\..\src\mod\sound.h" />
     <ClInclude Include="..\..\src\mod\unittype.h" />
     <ClInclude Include="..\..\src\mod\vehicletype.h" />
     <ClInclude Include="..\..\src\mod\walltype.h" />
@@ -555,12 +608,8 @@
     <ClInclude Include="..\..\src\spark\Extensions\Zones\SPK_Point.h" />
     <ClInclude Include="..\..\src\spark\Extensions\Zones\SPK_Ring.h" />
     <ClInclude Include="..\..\src\spark\Extensions\Zones\SPK_Sphere.h" />
+    <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GL2LineRenderer.h" />
     <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GL2PointRenderer.h" />
-    <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLExtHandler.h" />
-    <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLLineRenderer.h" />
-    <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLLineTrailRenderer.h" />
-    <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLPointRenderer.h" />
-    <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLQuadRenderer.h" />
     <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GLRenderer.h" />
     <ClInclude Include="..\..\src\spark\RenderingAPIs\OpenGL\SPK_GL_DEF.h" />
     <ClInclude Include="..\..\src\spark\SPK.h" />

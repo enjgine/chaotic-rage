@@ -6,6 +6,7 @@
 #include "../rage.h"
 #include "../game_state.h"
 #include "../map/map.h"
+#include "../map/heightmap.h"
 #include "../entity/entity.h"
 #include "../entity/unit.h"
 #include "render_debug.h"
@@ -31,13 +32,18 @@ RenderDebug::~RenderDebug()
 
 
 /**
-* Load a texture bitmap from file
-* Basically just wraps SDL_LoadBMP
+* Create a texture filled with a solid colour
 **/
-SDL_Texture *RenderDebug::loadTexture(const char* filename)
+SDL_Texture *RenderDebug::createSolidTexture(int width, int height, int r, int g, int b, int a)
 {
-	SDL_Surface *surf = SDL_LoadBMP(filename);
-	SDL_Texture *tex = SDL_CreateTextureFromSurface(this->renderer, surf);
+	SDL_Surface *surf;
+	SDL_Texture *tex;
+
+	surf = SDL_CreateRGBSurface(0, width, height, 32, 0, 0, 0, 0);
+	SDL_FillRect(surf, NULL, SDL_MapRGBA(surf->format, r, g, b, a));
+
+	tex = SDL_CreateTextureFromSurface(this->renderer, surf);
+
 	SDL_FreeSurface(surf);
 	return tex;
 }
@@ -70,11 +76,11 @@ void RenderDebug::setScreenSize(int width, int height, bool fullscreen)
 	}
 
 	// Load assets
-	this->sprite_wall = this->loadTexture("data/debug/wall.bmp");
-	this->sprite_vehicle = this->loadTexture("data/debug/vehicle.bmp");
-	this->sprite_object = this->loadTexture("data/debug/object.bmp");
-	this->sprite_unit = this->loadTexture("data/debug/unit.bmp");
-	this->sprite_player = this->loadTexture("data/debug/player.bmp");
+	this->sprite_wall = this->createSolidTexture(16, 16, 18, 0, 255, 0);       // blue
+	this->sprite_vehicle = this->createSolidTexture(16, 16, 255, 0, 0, 0);     // red
+	this->sprite_object = this->createSolidTexture(16, 16, 30, 157, 0, 0);     // green
+	this->sprite_unit = this->createSolidTexture(16, 16, 255, 126, 0, 0);      // orange
+	this->sprite_player = this->createSolidTexture(16, 16, 246, 255, 0, 0);    // yellow
 }
 
 
@@ -141,6 +147,14 @@ void RenderDebug::renderSprite(SpritePtr sprite, int x, int y, int w, int h)
 void RenderDebug::preGame()
 {
 	last_render = st->game_time;
+
+	this->bg = NULL;
+	if (!this->st->map->heightmaps.empty()) {
+		SpritePtr bg = this->st->map->heightmaps[0]->getBigTexture();
+		if (bg) {
+			this->bg = SDL_CreateTextureFromSurface(this->renderer, bg->orig);
+		}
+	}
 }
 
 
@@ -149,6 +163,7 @@ void RenderDebug::preGame()
 **/
 void RenderDebug::postGame()
 {
+	SDL_DestroyTexture(this->bg);
 }
 
 
@@ -209,6 +224,10 @@ void RenderDebug::render()
 	dest.h = 16;
 
 	SDL_RenderClear(this->renderer);
+
+	if (this->bg != NULL) {
+		SDL_RenderCopy(this->renderer, this->bg, NULL, NULL);
+	}
 
 	// Entities
 	for (list<Entity*>::iterator it = st->entities.begin(); it != st->entities.end(); ++it) {

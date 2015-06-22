@@ -23,7 +23,7 @@ using namespace std;
 * Transforms of the raycast weapons
 **/
 template <class T>
-void raycastDoFire(T const &weapon, Unit *u, btTransform &origin, btVector3 &begin, btVector3 &end)
+void raycastDoFire(T const &weapon, Unit *u, btTransform &origin, btVector3 &begin, btVector3 &end, float damage_multiplier)
 {
 	btTransform xform = origin;
 
@@ -36,7 +36,6 @@ void raycastDoFire(T const &weapon, Unit *u, btTransform &origin, btVector3 &beg
 	// Begin and end vectors
 	begin = xform.getOrigin();
 	end = begin + xform.getBasis() * btVector3(0.0f, 0.0f, weapon->range);
-	weapon->st->addDebugLine(&begin, &end);
 
 	// Do the rayTest
 	btCollisionWorld::ClosestRayResultCallback cb(begin, end);
@@ -49,11 +48,7 @@ void raycastDoFire(T const &weapon, Unit *u, btTransform &origin, btVector3 &beg
 			Entity* entA = static_cast<Entity*>(cb.m_collisionObject->getUserPointer());
 			DEBUG("weap", "Ray hit %p", entA);
 			if (entA) {
-				if (entA->klass() == UNIT) {
-					((Unit*)entA)->takeDamage(weapon->damage);
-				} else if (entA->klass() == WALL) {
-					((Wall*)entA)->takeDamage(weapon->damage);
-				}
+				entA->takeDamage(weapon->damage * damage_multiplier);
 			}
 		}
 
@@ -66,13 +61,13 @@ void raycastDoFire(T const &weapon, Unit *u, btTransform &origin, btVector3 &beg
 /**
 * Fires a weapon, from a specified Unit
 **/
-void WeaponRaycast::doFire(Unit *u, btTransform &origin)
+void WeaponRaycast::doFire(Unit *u, btTransform &origin, float damage_multiplier)
 {
 	btVector3 begin;
 	btVector3 end;
 
 	for (unsigned int i = this->burst; i != 0; --i) {
-		raycastDoFire(this, u, origin, begin, end);
+		raycastDoFire(this, u, origin, begin, end, damage_multiplier);
 		create_particles_weapon(u->getGameState(), &begin, &end);
 	}
 }
@@ -81,12 +76,12 @@ void WeaponRaycast::doFire(Unit *u, btTransform &origin)
 /**
 * Fires a weapon, from a specified Unit
 **/
-void WeaponFlamethrower::doFire(Unit *u, btTransform &origin)
+void WeaponFlamethrower::doFire(Unit *u, btTransform &origin, float damage_multiplier)
 {
 	btVector3 begin;
 	btVector3 end;
 
-	raycastDoFire(this, u, origin, begin, end);
+	raycastDoFire(this, u, origin, begin, end, damage_multiplier);
 
 	// Show the weapon fire
 	create_particles_flamethrower(u->getGameState(), &begin, &end);

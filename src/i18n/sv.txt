@@ -15,6 +15,7 @@ MENU_QUIT         Avsluta
 # New game menu
 NEWGAME_TYPE             Speltyp
 NEWGAME_WEAPONS          Vapen
+NEWGAME_ENVIRONMENT      Spelmiljö
 NEWGAME_MAP              Karta
 NEWGAME_UNIT             Karaktär
 NEWGAME_VIEW             Kameraläge
@@ -28,6 +29,15 @@ WEAPONS_STANDARD_UNIT    Standardvapen för karaktär
 WEAPONS_STANDARD_GAME    Standardvapen för speltyp
 WEAPONS_SAVE             Spara val av vapen
 
+# Environment menu
+ENVIRONMENT_TIMEOFDAY    Tid på dagen
+ENVIRONMENT_DAY_NIGHT    Dag/natt-cykler
+ENVIRONMENT_RAIN         Nederbörd (regn)
+ENVIRONMENT_SNOW         Nederbörd (snö)
+ENVIRONMENT_RND_WEATHER  Slumpvist väder
+ENVIRONMENT_GT_WEATHER   Tillåt att spelet ändrar väder
+ENVIRONMENT_SAVE         Spara inställningar
+
 # Network menu
 NETWORK_DIRECT           Direkt
 NETWORK_LOCAL            Lokalt
@@ -35,3 +45,17 @@ NETWORK_INTERNET         Internet
 NETWORK_HOSTNAME         Värdnamn
 NETWORK_REFRESH_LIST     Ladda om lista
 NETWORK_JOIN_GAME        Anslut till spel
+
+# Settings menu
+SETTINGS_MSAA            MSAA
+SETTINGS_TEX_FILTER      Tex-Filter
+SETTINGS_LANGUAGE        Språk
+SETTINGS_FULLSCREEN      Fullskärm
+SETTINGS_WIDTH           Skärmbredd
+SETTINGS_HEIGHT          Skärmhöjd
+SETTINGS_SAVE            Spara
+
+# In game
+GAME_QUIT                Avsluta? Säker?
+GAME_YES                 Ja
+GAME_NO                  Nej

@@ -21,7 +21,6 @@
 #include "objecttype.h"
 #include "unittype.h"
 #include "song.h"
-#include "sound.h"
 #include "walltype.h"
 #include "vehicletype.h"
 #include "weapontype.h"
@@ -40,7 +39,7 @@ using namespace std;
 bool loadMods(GameState *st, UIUpdate* ui)
 {
 	// Load main mod
-	Mod * mod = new Mod(st, "data/cr");
+	Mod * mod = new Mod(st, GEng()->cmdline->main_mod_path);
 	if (! mod->load(ui)) {
 		reportFatalError("Unable to load mod 'cr'.");
 	}
@@ -49,7 +48,7 @@ bool loadMods(GameState *st, UIUpdate* ui)
 
 	// Load the game font from the main mod
 	if (GEng()->render->is3D()) {
-		static_cast<Render3D*>(GEng()->render)->loadFont("DejaVuSans.ttf", mod);
+		static_cast<Render3D*>(GEng()->render)->loadFont("DejaVuSans", mod);
 	}
 
 	// If a suppl mod has been specified on the cmdline, try to load it
@@ -169,11 +168,11 @@ vector<string> * ModManager::getLoadedMods()
 **/
 vector<string> * ModManager::getAvailMods()
 {
-	list<string>* mods = getSystemModNames();
+	vector<string>* mods = getSystemModNames();
 	vector<string>* out = new vector<string>();
 	out->push_back("cr");	// force to top of list
-	for (list<string>::iterator it = mods->begin(); it != mods->end(); ++it) {
-		if ((*it) != "debug" && (*it) != "intro" && (*it) != "cr") {
+	for (vector<string>::iterator it = mods->begin(); it != mods->end(); ++it) {
+		if ((*it) != "debug" && (*it) != "intro" && (*it) != "i18n" && (*it) != "cr") {
 			out->push_back(*it);
 		}
 	}
@@ -485,23 +484,6 @@ Song * ModManager::getRandomSong()
 {
 	Mod *mod = this->mods->at(getRandom(0, mods->size() - 1));
 	return mod->getRandomSong();
-}
-
-
-/**
-* Gets a sound by name
-**/
-Sound * ModManager::getSound(string name)
-{
-	if (name.empty()) return NULL;
-
-	for (unsigned int i = 0; i < this->mods->size(); i++) {
-		Mod *mod = this->mods->at(i);
-		Sound *et = mod->getSound(name);
-		if (et) return et;
-	}
-
-	return NULL;
 }
 
 

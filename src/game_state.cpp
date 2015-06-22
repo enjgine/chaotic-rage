@@ -15,7 +15,7 @@
 #include "events.h"
 #include "game_engine.h"
 #include "game_settings.h"
-#include "lua/gamelogic.h"
+#include "script/gamelogic.h"
 #include "map/map.h"
 #include "physics_bullet.h"
 #include "entity/ammo_round.h"
@@ -38,10 +38,13 @@
 #include "net/net_client.h"
 #include "net/net_server.h"
 #include "util/cmdline.h"
-
-#ifdef USE_SPARK
+#include "fx/weather.h"
 #include "spark/SPK.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
 #endif
+
 
 using namespace std;
 
@@ -105,7 +108,6 @@ GameState::GameState()
 	this->gt = NULL;
 	this->gs = NULL;
 	this->particle_system = NULL;
-	this->particle_renderer = NULL;
 
 	g_st = this;
 }
@@ -251,7 +253,6 @@ void GameState::remAnimPlay(AnimPlay* play)
 void GameState::addLight(Light* light)
 {
 	GEng()->render->addLight(light);
-	this->addDebugPoint(light->x, light->y, light->z);
 }
 
 
@@ -261,6 +262,15 @@ void GameState::addLight(Light* light)
 void GameState::remLight(Light* light)
 {
 	GEng()->render->remLight(light);
+}
+
+
+/**
+* Set torch state
+**/
+void GameState::setTorch(bool on)
+{
+	GEng()->render->setTorch(on);
 }
 
 
@@ -340,46 +350,26 @@ list<AmmoRound*>* GameState::findAmmoRoundsUnit(Unit* u)
 
 
 /**
-* Return the PlayerState for a local player, with the given slot number.
-* May return NULL (i.e. invalid slot or non-local slot)
-**/
-PlayerState * GameState::localPlayerFromSlot(unsigned int slot)
-{
-	for (unsigned int i = 0; i < num_local; i++) {
-		if (local_players[i]->slot == slot) return local_players[i];
-	}
-	return NULL;
-}
-
-
-/**
-* Gets the entropy for a given player
-**/
-unsigned int GameState::getEntropy(unsigned int slot)
-{
-	return this->entropy;
-}
-
-/**
-* Increases the entropy for a player
-**/
-void GameState::increaseEntropy(unsigned int slot)
-{
-	this->entropy += 10;
-}
-
-
-/**
 * Add a particle group
 * Is a no-op if we don't have the particle system compiled in
 **/
 void GameState::addParticleGroup(SPK::Group* group)
 {
-	#ifdef USE_SPARK
-		if (this->particle_renderer == NULL) return;
-		group->setRenderer(this->particle_renderer);
-		this->particle_system->addGroup(group);
-	#endif
+	if (this->particle_system == NULL) return;
+	if (group->getRenderer() == NULL) {
+		group->setRenderer(static_cast<Render3D*>(GEng()->render)->renderer_points);
+	}
+	this->particle_system->addGroup(group);
+}
+
+
+/**
+* Remove a particle group
+* Is a no-op if we don't have the particle system compiled in
+**/
+void GameState::removeParticleGroup(SPK::Group* group)
+{
+	this->particle_system->removeGroup(group);
 }
 
 
@@ -395,11 +385,27 @@ void GameState::preGame()
 	GEng()->initGuichan();
 	GEng()->setMouseGrab(true);
 
-	#ifdef USE_SPARK
+	if (GEng()->render->is3D()) {
 		this->particle_system = new SPK::System();
-	#endif
+	}
 
-	this->entropy = 0;
+	// Time of day cycle
+	this->time_of_day = this->gs->time_of_day;
+	this->time_cycle = this->gs->time_of_day < 0.5f ? -0.01f : 0.01f;
+	if (!gs->day_night_cycle) {
+		GEng()->render->setAmbient(glm::vec4(this->time_of_day, this->time_of_day, this->time_of_day, 1.0f));
+		this->doTorch();
+	}
+
+	// Weather
+	this->weather = new Weather(this, this->map->width, this->map->height, this->map->weather);
+	if (this->gs->rain_flow > 0) this->weather->startRain(this->gs->rain_flow);
+	if (this->gs->snow_flow > 0) this->weather->startSnow(this->gs->snow_flow);
+	if (this->gs->random_weather) {
+		this->weather->enableRandom();
+	} else {
+		this->weather->disableRandom();
+	}
 }
 
 
@@ -411,9 +417,8 @@ void GameState::postGame()
 	this->entities.remove_if(EntityEraserAll);
 	this->entities_add.remove_if(EntityEraserAll);
 
-	#ifdef USE_SPARK
-		delete this->particle_system;
-	#endif
+	delete this->particle_system;
+	delete this->weather;
 
 	// TODO: Are these needed?
 	this->units.clear();
@@ -438,14 +443,10 @@ int mk_down_x[MAX_LOCAL], mk_down_y[MAX_LOCAL];
 **/
 void GameState::gameLoop(Render* render, Audio* audio, NetClient* client)
 {
-	int start = 0;
-
 	for (int i = 0; i < MAX_LOCAL; i++) {
 		game_x[i] = game_y[i] = net_x[i] = net_y[i] = mk_down_x[i] = mk_down_y[i] = 0;
 		ignore_relative_mouse[i] = false;
 	}
-
-	start = SDL_GetTicks();
 
 	this->physics->preGame();
 	this->map->preGame();
@@ -472,49 +473,17 @@ void GameState::gameLoop(Render* render, Audio* audio, NetClient* client)
 	}
 
 	this->running = true;
-	while (this->running) {
-		int delta = SDL_GetTicks() - start;
-		start = SDL_GetTicks();
 
-		this->logic->update(delta);
-		this->update(delta);
-		handleEvents(this);
-
-		if (GEng()->getMouseGrab()) {
-			if (this->local_players[0]->p) this->local_players[0]->p->angleFromMouse(game_x[0], game_y[0], delta);
-			if (this->local_players[1]->p) this->local_players[1]->p->angleFromMouse(game_x[1], game_y[1], delta);
-			game_x[0] = game_y[0] = 0;
-			game_x[1] = game_y[1] = 0;
+	// The main game loop
+	#ifdef __EMSCRIPTEN__
+		emscripten_set_main_loop_arg(GameState::gameLoopIterEmscripten, (void*)this, 0, true);
+	#else
+		while (this->running) {
+			this->gameLoopIter();
+			if (GEng()->cmdline->throttle) SDL_Delay(1);
+			MAINLOOP_ITER
 		}
-
-		if (client != NULL) {
-			if (this->local_players[0]->p) {
-				client->addmsgKeyMouseStatus(net_x[0], net_y[0], delta, this->local_players[0]->p->packKeys());
-				net_x[0] = net_y[0] = 0;
-			}
-			client->update();
-		}
-
-		if (GEng()->server != NULL) {
-			if (!GEng()->server->update()) {
-				// Server shutting down, shut down game
-				this->running = false;
-				break;
-			}
-		}
-
-		PROFILE_START(render);
-		render->render();
-		PROFILE_END(render);
-
-		audio->play();
-
-		if (GEng()->cmdline->throttle) {
-			SDL_Delay(1);
-		}
-
-		MAINLOOP_ITER
-	}
+	#endif
 
 	if (client != NULL) {
 		client->addmsgQuit();
@@ -527,6 +496,62 @@ void GameState::gameLoop(Render* render, Audio* audio, NetClient* client)
 	audio->postGame();
 	this->map->postGame();
 	this->physics->postGame();
+}
+
+
+/**
+* Internal of the main game loop - emscripten wrapper
+**/
+void GameState::gameLoopIterEmscripten(void* arg)
+{
+	static_cast<GameState*>(arg)->gameLoopIter();
+}
+
+
+/**
+* Internal of the main game loop
+**/
+void GameState::gameLoopIter()
+{
+	static int start = SDL_GetTicks();
+
+	int delta = SDL_GetTicks() - start;
+	start = SDL_GetTicks();
+
+	this->logic->update(delta);
+	this->update(delta);
+	handleEvents(this);
+
+	if (GEng()->getMouseGrab()) {
+		if (this->local_players[0]->p) this->local_players[0]->p->angleFromMouse(game_x[0], game_y[0], delta);
+		if (this->local_players[1]->p) this->local_players[1]->p->angleFromMouse(game_x[1], game_y[1], delta);
+		game_x[0] = game_y[0] = 0;
+		game_x[1] = game_y[1] = 0;
+	}
+
+	if (GEng()->client != NULL) {
+		if (this->local_players[0]->p) {
+			GEng()->client->addmsgKeyMouseStatus(net_x[0], net_y[0], delta, this->local_players[0]->p->packKeys());
+			net_x[0] = net_y[0] = 0;
+		}
+		GEng()->client->update();
+	}
+
+	if (GEng()->server != NULL) {
+		if (!GEng()->server->update()) {
+			this->running = false;
+		}
+	}
+
+	PROFILE_START(render);
+	GEng()->render->render();
+	PROFILE_END(render);
+
+	GEng()->audio->play();
+
+	#ifdef __EMSCRIPTEN__
+		if (! this->running) emscripten_cancel_main_loop();
+	#endif
 }
 
 
@@ -564,17 +589,19 @@ void GameState::update(int delta)
 	this->physics->stepTime(delta);
 	PROFILE_END(physics);
 
-	// Particles
-	#ifdef USE_SPARK
-		this->particle_system->update(delta / 1000.0f);
-	#endif
-
-	// Map animationss
+	// Map
 	this->map->update(delta);
+	
+	// Weather and particles
+	if (this->particle_system != NULL) {
+		this->weather->update((float)delta);
+		this->particle_system->update(delta / 1000.0f);
+	}
 
-	// Decrease entropy
-	if (this->entropy > 0) {
-		this->entropy--;
+	// Time of day cycle
+	if (gs->day_night_cycle) {
+		this->doTimeOfDay(delta);
+		this->doTorch();
 	}
 
 	// Handle guichan logic
@@ -592,13 +619,33 @@ void GameState::update(int delta)
 
 
 /**
-* Called by non-gameloop code (e.g. network, scripting) to indicate
-* a game-over situation
+* Recalculate the ambient light based on time-of-day
 **/
-void GameState::gameOver()
+void GameState::doTimeOfDay(float delta)
 {
-	this->running = false;
-	this->last_game_result = -1;
+	if (this->time_of_day > 1.0f || this->time_of_day < 0.0f) {
+		this->time_cycle = 0.0f - this->time_cycle;
+	}
+	this->time_of_day += this->time_cycle * delta / 1000.0f;
+
+	// Make it darker if it rains
+	float rain_flow = this->weather->getRainFlow();
+	
+	float ambient = MAX(0.0f, this->time_of_day - 0.5f * rain_flow);
+	GEng()->render->setAmbient(glm::vec4(ambient, ambient, ambient, 1.0f));
+}
+
+
+/**
+* Recalculate if torch should be on or off
+**/
+void GameState::doTorch()
+{
+	if (this->time_of_day < 0.3f) {
+		GEng()->render->setTorch(true);
+	} else {
+		GEng()->render->setTorch(false);
+	}
 }
 
 
@@ -606,7 +653,7 @@ void GameState::gameOver()
 * Called by non-gameloop code (e.g. network, scripting) to indicate
 * a game-over situation
 *
-* This variant also sets a "result" flag (1 = success, 0 = failure)
+* Sets a "result" flag (1 = success, 0 = failure, -1 = undefined - network error or likewise)
 * which is passed to the campaign logic to decide what to do next.
 **/
 void GameState::gameOver(int result)
@@ -698,18 +745,26 @@ vector<WeaponType*>* GameState::getSpawnWeapons(UnitType* ut, Faction fac)
 
 
 /**
-* Send a message to a given slot. Use ALL_SLOTS to send to all slots
+* Return the PlayerState for a given Player or NULL if not local
 **/
-void GameState::addHUDMessage(unsigned int slot, string text)
+PlayerState* GameState::getLocalPlayer(const Player* p)
 {
-	if (slot == ALL_SLOTS) {
-		for (unsigned int i = 0; i < num_local; i++) {
-			local_players[i]->hud->addMessage(text);
-		}
-	} else {
-		PlayerState *ps = localPlayerFromSlot(slot);
-		if (ps) ps->hud->addMessage(text);
+	for (unsigned int i = 0; i < this->num_local; i++) {
+		if (local_players[i]->p == p) return local_players[i];
 	}
+	return NULL;
+}
+
+
+/**
+* Return the PlayerState for a given slot or NULL if not local
+**/
+PlayerState* GameState::getLocalPlayer(unsigned int slot)
+{
+	for (unsigned int i = 0; i < this->num_local; i++) {
+		if (local_players[i]->slot == slot) return local_players[i];
+	}
+	return NULL;
 }
 
 
@@ -719,22 +774,39 @@ void GameState::addHUDMessage(unsigned int slot, string text)
 void GameState::addHUDMessage(unsigned int slot, string text, string text2)
 {
 	text.append(text2);
-	this->addHUDMessage(slot, text);
+	if (slot == ALL_SLOTS) {
+		for (unsigned int i = 0; i < num_local; i++) {
+			local_players[i]->hud->addMessage(text);
+		}
+	} else {
+		const PlayerState *ps = this->getLocalPlayer(slot);
+		if (ps != NULL) {
+			ps->hud->addMessage(text);
+		}
+	}
 }
 
 
 /**
 * Add a label to a given slot. Use ALL_SLOTS to add to all slots
 **/
-HUDLabel* GameState::addHUDLabel(unsigned int slot, float x, float y, string data)
+HUDLabel* GameState::addHUDLabel(unsigned int slot, int x, int y, string data, HUDLabel* l)
 {
+	const PlayerState *ps;
 
-	// This doesn't actually work properly
-
-	PlayerState *ps = this->localPlayerFromSlot(1);
-
-	if (ps && ps->hud) {
-		return ps->hud->addLabel(x, y, data);
+	// TODO: Fix if ALL_SLOTS, HUD label only added to the first slot/player
+	if (slot == ALL_SLOTS) {
+		for (unsigned int i = 0; i < num_local; i++) {
+			ps = local_players[i];
+			if (ps && ps->hud) {
+				return ps->hud->addLabel(x, y, data, l);
+			}
+		}
+	} else {
+		ps = this->getLocalPlayer(slot);
+		if (ps != NULL && ps->hud != NULL) {
+			return ps->hud->addLabel(x, y, data, l);
+		}
 	}
 
 	return NULL;
@@ -755,8 +827,6 @@ bool GameState::mousePick(unsigned int x, unsigned int y, btVector3& hitLocation
 	btVector3 start, end;
 	reinterpret_cast<Render3D*>(GEng()->render)->mouseRaycast(x, y, start, end);
 
-	this->addDebugLine(&start, &end);
-
 	// Do raycast
 	btCollisionWorld::ClosestRayResultCallback cb(start, end);
 	cb.m_collisionFilterGroup = CG_UNIT;
@@ -775,37 +845,4 @@ bool GameState::mousePick(unsigned int x, unsigned int y, btVector3& hitLocation
 	}
 
 	return false;
-}
-
-
-
-void GameState::addDebugLine(btVector3 * a, btVector3 * b)
-{
-	DebugLine *dl = new DebugLine();
-	dl->a = new btVector3(*a);
-	dl->b = new btVector3(*b);
-	lines.push_back(dl);
-}
-
-void GameState::addDebugPoint(float x, float y, float z)
-{
-	this->addDebugPoint(x, y, z, 1.0f);
-}
-
-void GameState::addDebugPoint(float x, float y, float z, float len)
-{
-	DebugLine* dl = new DebugLine();
-	dl->a = new btVector3(x - len, y, z);
-	dl->b = new btVector3(x + len, y, z);
-	lines.push_back(dl);
-
-	dl = new DebugLine();
-	dl->a = new btVector3(x, y - len, z);
-	dl->b = new btVector3(x, y + len, z);
-	lines.push_back(dl);
-
-	dl = new DebugLine();
-	dl->a = new btVector3(x, y, z - len);
-	dl->b = new btVector3(x, y, z + len);
-	lines.push_back(dl);
 }

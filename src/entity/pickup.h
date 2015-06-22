@@ -8,7 +8,6 @@
 class AnimPlay;
 class GameState;
 class PickupType;
-class Sound;
 class Unit;
 
 
@@ -39,6 +38,5 @@ class Pickup : public Entity
 
 
 	public:
-		virtual Sound* getSound();
 		virtual void update(int delta);
 };

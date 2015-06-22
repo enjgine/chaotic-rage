@@ -21,28 +21,6 @@
 
 
 
-// Constants for VBOs <-> Shaders
-// (glBindAttribLocation)
-#define ATTRIB_POSITION 0         // vPosition
-#define ATTRIB_NORMAL 1           // vNormal
-#define ATTRIB_TEXUV 2            // vTexUV
-#define ATTRIB_BONEID 3           // vBoneIDs
-#define ATTRIB_BONEWEIGHT 4       // vBoneWeights
-#define ATTRIB_TEXTCOORD 5        // vCoord
-#define ATTRIB_COLOR 6            // vColor
-#define ATTRIB_TANGENT 7          // vTangent
-
-// Shader IDs
-// TODO: Should this be an enum instead?
-#define SHADER_BASIC 0
-#define SHADER_SKYBOX 1
-#define SHADER_ENTITY_STATIC 2
-#define SHADER_ENTITY_BONES 3
-#define SHADER_TERRAIN 4
-#define SHADER_WATER 5
-#define SHADER_TEXT 6
-
-
 struct VBOvertex
 {
 	float x, y, z;        // Vertex
@@ -75,11 +53,16 @@ class RenderOpenGL : public Render3D
 	friend class OpenGLFont;
 
 	private:
-		SDL_Window *window;
-		SDL_GLContext glcontext;
+		#ifdef SDL1_VIDEO
+			SDL_Surface *window;
+		#else
+			SDL_Window *window;
+			SDL_GLContext glcontext;
+		#endif
 
 		// The current player being rendered (split screen)
 		Player* render_player;
+		glm::vec3 render_player_pos;
 
 		// Loaded sprites
 		vector<SpritePtr> loaded;
@@ -137,7 +120,8 @@ class RenderOpenGL : public Render3D
 
 		// Lights
 		vector<Light*> lights;
-		bool lights_changed;
+		bool torch;
+		glm::vec4 ambient;
 
 	public:
 		RenderOpenGL(GameState * st, RenderOpenGLSettings* settings);
@@ -168,7 +152,9 @@ class RenderOpenGL : public Render3D
 		virtual void remAnimPlay(AnimPlay* play);
 		virtual void addLight(Light* light);
 		virtual void remLight(Light* light);
-		
+		virtual void setTorch(bool on);
+		virtual void setAmbient(glm::vec4 ambient);
+
 		virtual void setPhysicsDebug(bool status);
 		virtual bool getPhysicsDebug();
 		virtual void setSpeedDebug(bool status) { this->speeddebug = status; }
@@ -178,11 +164,8 @@ class RenderOpenGL : public Render3D
 		// From class Render3D
 		virtual void saveScreenshot(string filename);
 		virtual void initGuichan(gcn::Gui * gui, Mod * mod);
-		virtual void preVBOrender();
-		virtual void postVBOrender();
-		virtual void renderObj (WavefrontObj * obj, glm::mat4 mvp);
 		virtual void loadFont(string name, Mod * mod);
-		virtual void renderText(string text, float x = 0.0f, float y = 0.0f, float r = 1.0f, float g = 1.0f, float b = 1.0f, float a = 1.0f);
+		virtual void renderText(string text, int x = 0, int y = 0, float r = 1.0f, float g = 1.0f, float b = 1.0f, float a = 1.0f);
 		virtual unsigned int widthText(string text);
 		virtual SpritePtr loadCubemap(string filename_base, string filename_ext, Mod * mod);
 		virtual void mouseRaycast(int x, int y, btVector3& start, btVector3& end);
@@ -208,7 +191,8 @@ class RenderOpenGL : public Render3D
 		void surfaceToOpenGL(SpritePtr sprite);
 
 		// Entity rendering
-		void renderAnimPlay(AnimPlay * play, Entity * e);
+		GLShader* determineAssimpModelShader(AssimpModel* play);
+		void renderAnimPlay(AnimPlay* play, Entity * e);
 		void renderAnimPlay(AnimPlay* play, const glm::mat4 &modelMatrix);
 		void recursiveRenderAssimpModelStatic(AnimPlay* ap, AssimpModel *am, AssimpNode *nd, GLShader *shader, const glm::mat4 &modelMatrix);
 		void recursiveRenderAssimpModelBones(AnimPlay* ap, AssimpModel *am, AssimpNode *nd, GLShader *shader);
@@ -227,9 +211,9 @@ class RenderOpenGL : public Render3D
 
 		void loadShaders();
 		GLuint createShader(const char* code, GLenum type);
-		GLShader* createProgram(const char* vertex, const char* fragment, string name);
+		GLShader* createProgram(const char* vertex, const char* fragment);
 		GLShader* loadProgram(Mod* mod, string name);
+		GLShader* loadProgram(Mod* mod, string vertex_name, string fragment_name);
 		void deleteProgram(GLShader* shader);
 		void setupShaders();
 };
-

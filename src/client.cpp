@@ -19,6 +19,10 @@
 #include "i18n/gettext.h"
 #include "audio/audio.h"
 
+#ifdef RELEASE
+	#include "http/client_stats.h"
+#endif
+
 #ifdef _WIN32
 	#include <fstream>
 	#include "util/stream_redirector.h"
@@ -85,8 +89,18 @@ int main(int argc, char ** argv)
 		reportFatalError("Module loading failed");
 	}
 	delete(ui);
+	ui = NULL;
 
 	gm = new GameManager(st);
+
+	// For now, Emscripten doesn't have a menu
+	#if defined(__EMSCRIPTEN__)
+		gm->loadModBits(NULL);
+		GameSettings *gs = new GameSettings();
+		gm->startGame(gm->getMapRegistry()->get("therlor_valley"), "zombies", "robot", GameSettings::behindPlayer, 1, false, gs);
+		delete(gs);
+		exit(0);
+	#endif
 
 	// List of mods
 	if (GEng()->cmdline->modlist) {
@@ -102,7 +116,7 @@ int main(int argc, char ** argv)
 		gm->loadModBits(NULL);
 		Campaign *c = GEng()->mm->getSupplOrBase()->getCampaign(GEng()->cmdline->campaign);
 		if (c == NULL) {
-			cerr << "Error: Campaign '" << GEng()->cmdline->campaign << "' does not exist." << endl;
+			displayMessageBox("Campaign not found: " + GEng()->cmdline->campaign);
 		} else {
 			gm->startCampaign(c, "robot", GameSettings::behindPlayer, 1);
 		}
@@ -111,7 +125,13 @@ int main(int argc, char ** argv)
 	} else if (GEng()->cmdline->map != "" && GEng()->cmdline->gametype != "" && GEng()->cmdline->unittype != "") {
 		gm->loadModBits(NULL);
 		GameSettings *gs = new GameSettings();
-		gm->startGame(gm->getMapRegistry()->get(GEng()->cmdline->map), GEng()->cmdline->gametype, GEng()->cmdline->unittype, GameSettings::behindPlayer, 1, GEng()->cmdline->host, gs);
+
+		MapReg* map = gm->getMapRegistry()->get(GEng()->cmdline->map);
+		if (map == NULL) {
+			displayMessageBox("Map not found: " + GEng()->cmdline->map);
+		} else {
+			gm->startGame(map, GEng()->cmdline->gametype, GEng()->cmdline->unittype, GameSettings::behindPlayer, 1, GEng()->cmdline->host, gs);
+		}
 		delete(gs);
 
 	// Network join
@@ -126,7 +146,7 @@ int main(int argc, char ** argv)
 		delete(m);
 
 	} else {
-		cout << "Non-interactive usage requires --campaign, --arcade or --join to be specified." << endl;
+		displayMessageBox("Non-interactive usage requires --campaign, --arcade or --join to be specified");
 	}
 
 	delete(st);

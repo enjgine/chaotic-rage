@@ -7,6 +7,7 @@
 #include <string>
 #include <btBulletDynamicsCommon.h>
 #include "../rage.h"
+#include "../render_opengl/assimpmodel.h"
 #include "mod.h"
 #include "unittype.h"
 
@@ -38,14 +39,18 @@ static cfg_opt_t unitsound_opts[] =
 cfg_opt_t unittype_opts[] =
 {
 	CFG_STR((char*) "name", 0, CFGF_NONE),
+
 	CFG_STR((char*) "model", 0, CFGF_NONE),
+	CFG_STR((char*) "node_head", 0, CFGF_NONE),
 
 	CFG_FLOAT((char*) "max_speed", 0.0f, CFGF_NONE),
 	CFG_FLOAT((char*) "melee_damage", 1000, CFGF_NONE),
 	CFG_INT((char*) "melee_delay", 500, CFGF_NONE),
 	CFG_INT((char*) "melee_cooldown", 1000, CFGF_NONE),
+	CFG_FLOAT((char*) "melee_range", 0.8f, CFGF_NONE),
 	CFG_INT((char*) "special_delay", 500, CFGF_NONE),
 	CFG_INT((char*) "special_cooldown", 1000, CFGF_NONE),
+	CFG_FLOAT((char*) "weapon_damage", 1.0f, CFGF_NONE),
 
 	CFG_SEC((char*) "animation", unitanim_opts, CFGF_MULTI),
 	CFG_SEC((char*) "sound", unitsound_opts, CFGF_MULTI),
@@ -68,6 +73,7 @@ UnitType* loadItemUnitType(cfg_t* cfg_item, Mod* mod)
 {
 	UnitType* uc;
 	int j;
+	char* tmp;
 
 	// Basics
 	uc = new UnitType();
@@ -77,22 +83,44 @@ UnitType* loadItemUnitType(cfg_t* cfg_item, Mod* mod)
 	uc->playable = cfg_getint(cfg_item, "playable");
 
 	// 3D model
-	char * tmp = cfg_getstr(cfg_item, "model");
-	if (tmp == NULL) return NULL;
+	tmp = cfg_getstr(cfg_item, "model");
+	if (tmp == NULL) {
+		mod->setLoadErr("No model specified");
+		delete(uc);
+		return NULL;
+	}
 	uc->model = mod->getAssimpModel(tmp);
-	if (uc->model == NULL) return NULL;
+	if (uc->model == NULL) {
+		mod->setLoadErr("Invalid model specified");
+		delete(uc);
+		return NULL;
+	}
 
+	// Node representing the head
+	tmp = cfg_getstr(cfg_item, "node_head");
+	if (tmp != NULL) {
+		AssimpNode* nd = uc->model->findNode(std::string(tmp));
+		if (nd == NULL) {
+			mod->setLoadErr("Invalid node_head");
+			delete(uc);
+			return NULL;
+		}
+		uc->node_head = nd;
+	}
+	
 	// Col shape
-	uc->col_shape = new btCapsuleShape(0.6f, 0.9f);
+	uc->col_shape = new btCapsuleShape(0.6f, UNIT_PHYSICS_HEIGHT/2.0f);
 
 	// Params
 	uc->params.max_speed = (float)cfg_getfloat(cfg_item, "max_speed");
 	uc->params.melee_damage = (float)cfg_getfloat(cfg_item, "melee_damage");
 	uc->params.melee_delay = cfg_getint(cfg_item, "melee_delay");
 	uc->params.melee_cooldown = cfg_getint(cfg_item, "melee_cooldown");
+	uc->params.melee_range = (float)cfg_getfloat(cfg_item, "melee_range");
 	uc->params.special_delay = cfg_getint(cfg_item, "special_delay");
 	uc->params.special_cooldown = cfg_getint(cfg_item, "special_cooldown");
-
+	uc->params.weapon_damage = (float)cfg_getfloat(cfg_item, "weapon_damage");
+	
 	// Animations
 	int num_animations = cfg_size(cfg_item, "animation");
 	for (j = 0; j < num_animations; j++) {
@@ -120,10 +148,19 @@ UnitType* loadItemUnitType(cfg_t* cfg_item, Mod* mod)
 
 		char * tmp = cfg_getstr(cfg_sound, "sound");
 		if (tmp == NULL) {
+			mod->setLoadErr("No value for field 'sound'");
 			delete(uts);
+			delete(uc);
 			return NULL;
 		}
+
 		uts->snd = mod->getSound(tmp);
+		if (uts->snd == NULL) {
+			mod->setLoadErr("Unable to load sound file");
+			delete(uts);
+			delete(uc);
+			return NULL;
+		}
 
 		uc->sounds.push_back(uts);
 	}
@@ -164,7 +201,7 @@ UnitType* loadItemUnitType(cfg_t* cfg_item, Mod* mod)
 * Returns a random sound which matches the specified type.
 * If it can't find a sound for that type, return NULL
 **/
-Sound* UnitType::getSound(int type)
+AudioPtr UnitType::getSound(int type)
 {
 	unsigned int j = 0;
 	unsigned int num = 0;
@@ -235,6 +272,7 @@ UnitType::UnitType()
 	this->params.melee_damage = 0.0f;
 	this->params.melee_delay = 0;
 	this->params.melee_cooldown = 0;
+	this->params.melee_range = 0.0f;
 	this->params.special_delay = 0;
 	this->params.special_cooldown = 0;
 }

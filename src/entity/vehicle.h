@@ -9,7 +9,6 @@
 
 class AnimPlay;
 class GameState;
-class Sound;
 class Unit;
 class btCollisionShape;
 class btTransform;
@@ -37,17 +36,19 @@ class Vehicle : public Entity
 		btRaycastVehicle* vehicle;
 		btCollisionShape* wheel_shape;
 
-	public:
+	protected:
 		explicit Vehicle(GameState *st);
-		Vehicle(VehicleType *vt, GameState *st, float mapx, float mapy);
+
+	public:
+		Vehicle(VehicleType *vt, GameState *st, float x, float z);
+		Vehicle(VehicleType *vt, GameState *st, float x, float y, float z);
 		Vehicle(VehicleType *vt, GameState *st, btTransform & loc);
 		void init(VehicleType *vt, GameState *st, btTransform & loc);
 		virtual ~Vehicle();
 
 	public:
-		virtual Sound* getSound();
 		virtual void update(int delta);
-		void takeDamage(int damage);
+		virtual void takeDamage(float damage);
 		virtual void enter();
 		virtual void operate(Unit* u, int delta, int key_up, int key_down, int key_left, int key_right, float horiz_angle, float vert_angle);
 		virtual void exit();

@@ -11,6 +11,9 @@
 namespace gcn {
 	class Gui;
 }
+namespace SPK {
+	class Renderer;
+}
 
 
 class Render3D : public Render
@@ -26,6 +29,10 @@ class Render3D : public Render
 		int real_height;
 		int virt_width;
 		int virt_height;
+
+		// Spark particle renderers
+		SPK::Renderer* renderer_points;
+		SPK::Renderer* renderer_lines;
 
 	public:
 		Render3D(GameState *st) : Render(st) {}
@@ -110,21 +117,6 @@ class Render3D : public Render
 		virtual void initGuichan(gcn::Gui * gui, Mod * mod) = 0;
 
 		/**
-		* Before one ore more VBOs are rendered. If not using VBOs, does nothing
-		**/
-		virtual void preVBOrender() = 0;
-
-		/**
-		* After one ore more VBOs are rendered. If not using VBOs, does nothing
-		**/
-		virtual void postVBOrender() = 0;
-
-		/**
-		* Render a object (i.e. a mesh + tex)
-		**/
-		virtual void renderObj (WavefrontObj * obj, glm::mat4 mvp) = 0;
-
-		/**
 		* Load the given ttf font
 		**/
 		virtual void loadFont(string name, Mod * mod) = 0;
@@ -132,7 +124,7 @@ class Render3D : public Render
 		/**
 		* Render some text
 		**/
-		virtual void renderText(string text, float x = 0.0f, float y = 0.0f, float r = 1.0f, float g = 1.0f, float b = 1.0f, float a = 1.0f) = 0;
+		virtual void renderText(string text, int x = 0, int y = 0, float r = 1.0f, float g = 1.0f, float b = 1.0f, float a = 1.0f) = 0;
 
 		/**
 		* Render some text

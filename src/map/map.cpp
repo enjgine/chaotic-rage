@@ -69,9 +69,7 @@ static cfg_opt_t wall_opts[] =
 static cfg_opt_t object_opts[] =
 {
 	CFG_FLOAT((char*) "x", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "y", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "z", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "angle", 0, CFGF_NONE),
+	CFG_FLOAT((char*) "y", 0, CFGF_NONE),		// TODO: Change to 'z'
 	CFG_STR((char*) "type", ((char*)""), CFGF_NONE),
 	CFG_END()
 };
@@ -80,8 +78,7 @@ static cfg_opt_t object_opts[] =
 static cfg_opt_t pickup_opts[] =
 {
 	CFG_FLOAT((char*) "x", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "y", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "z", 0, CFGF_NONE),
+	CFG_FLOAT((char*) "y", 0, CFGF_NONE),		// TODO: Change to 'z'
 	CFG_STR((char*) "type", ((char*)""), CFGF_NONE),
 	CFG_END()
 };
@@ -90,9 +87,7 @@ static cfg_opt_t pickup_opts[] =
 static cfg_opt_t vehicle_opts[] =
 {
 	CFG_FLOAT((char*) "x", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "y", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "z", 0, CFGF_NONE),
-	CFG_FLOAT((char*) "angle", 0, CFGF_NONE),
+	CFG_FLOAT((char*) "y", 0, CFGF_NONE),		// TODO: Change to 'z'
 	CFG_STR((char*) "type", ((char*)""), CFGF_NONE),
 	CFG_INT((char*) "train-num", 0, CFGF_NONE),
 	CFG_INT((char*) "train-idx", 0, CFGF_NONE),
@@ -156,6 +151,7 @@ static cfg_opt_t skybox_opts[] =
 	CFG_STR((char*) "base", ((char*)""), CFGF_NONE),
 	CFG_STR((char*) "ext", ((char*)""), CFGF_NONE),
 	CFG_FLOAT_LIST((char*) "size", 0, CFGF_NONE),
+	CFG_BOOL((char*) "inf", (cfg_bool_t)true, CFGF_NONE),
 	CFG_END()
 };
 
@@ -164,6 +160,7 @@ static cfg_opt_t opts[] =
 {
 	CFG_FLOAT((char*) "width", 0, CFGF_NONE),
 	CFG_FLOAT((char*) "height", 0, CFGF_NONE),
+	CFG_BOOL((char*) "weather", (cfg_bool_t)true, CFGF_NONE),
 
 	CFG_SEC((char*) "wall", wall_opts, CFGF_MULTI),
 	CFG_SEC((char*) "vehicle", vehicle_opts, CFGF_MULTI),
@@ -190,10 +187,11 @@ Map::Map(GameState * st)
 	this->mod = NULL;
 	this->width = 0.0f;
 	this->height = 0.0f;
+	this->weather = false;
 	this->skybox = NULL;
-	this->water = NULL;
+	this->skybox_inf = false;
 
-	this->ambient[0] = this->ambient[1] = this->ambient[2] = 0.3f;
+	this->water = NULL;
 	this->water_speed = 0.0f;
 	this->water_level = 0.0f;
 }
@@ -250,6 +248,7 @@ int Map::load(string name, Render *render, Mod* insideof)
 	// Get width and height
 	this->width = cfg_getfloat(cfg, "width");
 	this->height = cfg_getfloat(cfg, "height");
+	this->weather = cfg_getbool(cfg, "weather");
 
 	if (this->width <= 0.0f || this->height <= 0.0f) {
 		cerr << "No width or height set for map.\n";
@@ -348,14 +347,7 @@ int Map::load(string name, Render *render, Mod* insideof)
 		Render3D* render3d = static_cast<Render3D*>(this->render);
 		this->skybox = render3d->loadCubemap("skybox_", ".jpg", this->mod);
 		this->skybox_size = cfg_getvec3(cfg_sub, "size");
-	}
-
-	// Ambient lighting
-	int num = cfg_size(cfg, "ambient");
-	if (num == 3) {
-		this->ambient[0] = (float)(cfg_getnint(cfg, "ambient", 0) / 255.0f);
-		this->ambient[1] = (float)(cfg_getnint(cfg, "ambient", 1) / 255.0f);
-		this->ambient[2] = (float)(cfg_getnint(cfg, "ambient", 2) / 255.0f);
+		this->skybox_inf = cfg_getbool(cfg_sub, "inf");
 	}
 
 	// Zones
@@ -510,7 +502,7 @@ void Map::loadDefaultEntities()
 		ObjectType *ot = GEng()->mm->getObjectType(type);
 		if (ot == NULL) reportFatalError("Unable to load map; missing or invalid object type '" + type + "'");
 
-		Object * ob = new Object(ot, this->st, (float)cfg_getfloat(cfg_sub, "x"), (float)cfg_getfloat(cfg_sub, "y"), 1.0f, (float)cfg_getfloat(cfg_sub, "angle"));
+		Object * ob = new Object(ot, this->st, (float)cfg_getfloat(cfg_sub, "x"), (float)cfg_getfloat(cfg_sub, "y"));
 
 		this->st->addObject(ob);
 	}
@@ -566,7 +558,18 @@ void Map::loadDefaultEntities()
 
 		this->st->addLight(l);
 	}
-	
+
+	// Ambient lighting
+	int num = cfg_size(cfg, "ambient");
+	if (num == 3) {
+		GEng()->render->setAmbient(glm::vec4(
+			(float)cfg_getnint(cfg, "ambient", 0) / 255.0f,
+			(float)cfg_getnint(cfg, "ambient", 1) / 255.0f,
+			(float)cfg_getnint(cfg, "ambient", 2) / 255.0f,
+			1.0f
+		));
+	}
+
 	cfg_free(cfg);
 }
 

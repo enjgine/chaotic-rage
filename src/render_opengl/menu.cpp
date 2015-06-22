@@ -10,6 +10,7 @@
 #include "menu.h"
 #include "render_opengl.h"
 #include "animplay.h"
+#include "guichan_font.h"
 
 #include "../guichan/guichan.hpp"
 #include "../guichan/sdl.hpp"
@@ -51,6 +52,9 @@ Menu::Menu(GameState *st, GameManager *gm)
 	this->render = (RenderOpenGL*) GEng()->render;
 	this->logo = NULL;
 	this->bg = NULL;
+	this->font = NULL;
+	this->model = NULL;
+	this->play = NULL;
 }
 
 
@@ -59,6 +63,9 @@ Menu::~Menu()
 	menuClear();
 	delete(this->logo);
 	delete(this->bg);
+	delete(this->play);
+	delete(this->model);
+	delete(this->font);
 }
 
 
@@ -74,15 +81,32 @@ void Menu::loadModBits(UIUpdate* ui)
 	// Logo
 	delete(this->logo);
 	this->logo = this->render->loadSprite("menu/logo.png", mod);
-	if (!logo) {
+	if (!this->logo) {
 		this->logo = this->render->loadSprite("menu/logo.png", GEng()->mm->getBase());
 	}
 
 	// Background
 	delete(this->bg);
 	this->bg = this->render->loadSprite("menu/bg.jpg", mod);
-	if (!bg) {
+	if (!this->bg) {
 		this->bg = this->render->loadSprite("menu/bg.jpg", GEng()->mm->getBase());
+	}
+
+	// Rotating model
+	delete(this->play);
+	this->model = NULL;
+	this->play = NULL;
+	if (!mod->getMenuModelName().empty()) {
+		this->model_rot = -10.0f;
+		this->model = mod->getAssimpModel(mod->getMenuModelName());
+		if (this->model != NULL) {
+			this->play = new AnimPlay(this->model);
+		}
+	}
+
+	// Font always loaded from base mod
+	if (this->font == NULL) {
+		this->font = new OpenGLFont(this->render, "DejaVuSans", GEng()->mm->getBase(), 20.0f * GEng()->gui_scale);
 	}
 
 	this->loadMenuItems();
@@ -97,7 +121,7 @@ void Menu::loadMenuItems()
 	Mod* mod = GEng()->mm->getSupplOrBase();
 	int offsetX = 40;
 	int menus = 4 + mod->hasArcade() * 3 + mod->hasCampaign();
-	int offsetY = MIN(40, render->getHeight() / (menus + 1));
+	int offsetY = MIN(40, render->getHeight() / (menus + 1)) * GEng()->gui_scale;
 	int offsetYFirst = MIN(60, render->getHeight() / (menus + 1));
 
 	this->menuClear();
@@ -118,8 +142,11 @@ void Menu::loadMenuItems()
 		y -= offsetY;
 		this->menuAdd(_(STRING_MENU_NETWORK), offsetX, y, MC_NETWORK);
 
+		// There isn't a good way to make this work on Android
+		#if !defined(__ANDROID__)
 		y -= offsetY;
 		this->menuAdd(_(STRING_MENU_SPLIT), offsetX, y, MC_SPLITSCREEN);
+		#endif
 
 		y -= offsetY;
 		this->menuAdd(_(STRING_MENU_SINGLE), offsetX, y, MC_SINGLEPLAYER);
@@ -138,26 +165,18 @@ void Menu::loadMenuItems()
 **/
 void Menu::doit(UIUpdate* ui)
 {
-	Mod *mod = GEng()->mm->getBase();
+	this->base_mod = GEng()->mm->getBase();
 
-
+	// Set up guichan
 	this->input = new gcn::SDLInput();
 	this->gui = new gcn::Gui();
-	this->gui->setInput(input);
-	this->render->initGuichan(gui, mod);
 	this->gui_container = new gcn::Container();
-	this->gui_container->setDimension(gcn::Rectangle(0, 0, render->real_width, render->real_height));
+	this->handleScreenResChange();
+	this->gui->setInput(input);
 	this->gui_container->setOpaque(false);
 	this->gui->setTop(this->gui_container);
 
-	// This is a hack and leaks memory too
-	// TODO: Mod to be able to specify models
-	this->model_rot = -10.0f;
-	this->model = mod->getAssimpModel("magellan_16.dae");
-	this->play = new AnimPlay(this->model);
-
 	this->loadModBits(ui);
-	this->setupGLstate();
 
 	// Menu loop
 	this->running = true;
@@ -168,6 +187,17 @@ void Menu::doit(UIUpdate* ui)
 	delete(this->input);
 	delete(this->gui);
 	delete(this->gui_container);
+}
+
+
+/**
+* Called by the settings dialog when the screen res changes
+**/
+void Menu::handleScreenResChange()
+{
+	this->setupGLstate();
+	this->render->initGuichan(this->gui, this->base_mod);
+	this->gui_container->setDimension(gcn::Rectangle(0, 0, render->real_width, render->real_height));
 }
 
 
@@ -228,9 +258,12 @@ void Menu::updateUI()
 					}
 					break;
 
+				case SDLK_F2:
+					GEng()->audio->toggleMusicPlay();
+					break;
+
 				default: break;
 			}
-
 		}
 
 		input->pushInput(event);
@@ -266,14 +299,13 @@ void Menu::updateUI()
 	glUniformMatrix4fv(render->shaders[SHADER_BASIC]->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(render->ortho));
 	this->render->renderSprite(bg, 0, ((static_cast<float>(render->real_height - render->real_width)) / 2.0f), render->real_width, render->real_width);
 
-	// Draw an earth
 	if (this->model != NULL && this->play != NULL) {
 		glEnable(GL_DEPTH_TEST);
 
 		// Set up lights
 		glUseProgram(render->shaders[SHADER_ENTITY_STATIC]->p());
 		glUniform3fv(render->shaders[SHADER_ENTITY_STATIC]->uniform("uLightPos"), 1, glm::value_ptr(glm::vec3(1.2f, -0.8f, 10.7f)));
-		glUniform4fv(render->shaders[SHADER_ENTITY_STATIC]->uniform("uLightColor"), 1, glm::value_ptr(glm::vec4(0.9f, 0.9f, 0.9f, 1.0f)));
+		glUniform4fv(render->shaders[SHADER_ENTITY_STATIC]->uniform("uLightColor"), 1, glm::value_ptr(glm::vec4(0.9f, 0.9f, 0.9f, 0.3f)));
 		glUniform4fv(render->shaders[SHADER_ENTITY_STATIC]->uniform("uAmbient"), 1, glm::value_ptr(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)));
 		glUniformMatrix4fv(render->shaders[SHADER_ENTITY_STATIC]->uniform("uV"), 1, GL_FALSE, glm::value_ptr(render->view));
 
@@ -300,7 +332,11 @@ void Menu::updateUI()
 	gui->logic();
 	gui->draw();
 
-	SDL_GL_SwapWindow(render->window);
+	#ifdef SDL1_VIDEO
+		SDL_GL_SwapBuffers();
+	#else
+		SDL_GL_SwapWindow(this->render->window);
+	#endif
 }
 
 
@@ -326,10 +362,10 @@ void Menu::menuAdd(string name, int x, int y, MenuCommand cmd)
 	MenuItem * nu = new MenuItem();
 	this->menuitems.push_back(nu);
 
-	nu->x1 = static_cast<float>(x);
-	nu->x2 = static_cast<float>(x) + 200.0f;
-	nu->y1 = static_cast<float>(y);
-	nu->y2 = static_cast<float>(y) + 20.0f;
+	nu->x1 = x;
+	nu->x2 = x + 200;
+	nu->y1 = y;
+	nu->y2 = y + 20 * GEng()->gui_scale;
 	nu->name = name;
 	nu->cmd = cmd;
 	nu->hover = false;
@@ -346,12 +382,12 @@ void Menu::menuRender()
 	for (unsigned int i = 0; i < this->menuitems.size(); i++) {
 		MenuItem * m = this->menuitems.at(i);
 
-		this->render->renderText(m->name, m->x1 + 1.0f, m->y1 + 20.0f + 1.0f, 0.1f, 0.1f, 0.1f, 1.0f);
+		this->font->drawString(NULL, m->name, m->x1 + 1, m->y1 + 20 + 1, 0.1f, 0.1f, 0.1f, 1.0f);
 
 		if (m->hover) {
-			this->render->renderText(m->name, m->x1, m->y1 + 20.0f, 161.0f/255.0f, 0.0f, 0.0f, 1.0f);
+			this->font->drawString(NULL, m->name, m->x1, m->y1 + 20, 161.0f/255.0f, 0.0f, 0.0f, 1.0f);
 		} else {
-			this->render->renderText(m->name, m->x1, m->y1 + 20.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+			this->font->drawString(NULL, m->name, m->x1, m->y1 + 20, 1.0f, 1.0f, 1.0f, 1.0f);
 		}
 	}
 }
@@ -400,10 +436,11 @@ void Menu::addDialog(Dialog* dialog)
 	dialog->gm = this->gm;
 	dialog->setup();
 
-	gcn::Container* c = dialog->getContainer();
+	gcn::Window* c = (gcn::Window*)dialog->getContainer();
 
 	c->setPosition((this->render->real_width - c->getWidth()) / 2, (this->render->real_height - c->getHeight()) / 2);
 	c->setBaseColor(gcn::Color(150, 150, 150, 225));
+	c->setTitleBarHeight(c->getTitleBarHeight() * GEng()->gui_scale);
 
 	this->gui_container->add(c);
 	this->openDialogs.push_back(dialog);

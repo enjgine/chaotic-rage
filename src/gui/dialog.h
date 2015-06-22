@@ -11,10 +11,6 @@ class GameState;
 class Menu;
 
 
-using namespace std;
-
-
-
 /**
 * Base dialog class
 **/
@@ -28,7 +24,7 @@ class Dialog {
 
 	public:
 		Dialog() : c(NULL), m(NULL), gm(NULL) {}
-		virtual ~Dialog() {}
+		virtual ~Dialog();
 
 		/**
 		* Set up the container, creating all child widgets

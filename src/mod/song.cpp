@@ -30,15 +30,49 @@ Song* loadItemSong(cfg_t* cfg_item, Mod* mod)
 {
 	Song* sg;
 	string filename;
+	char* tmp;
 
 	sg = new Song();
-	sg->name = cfg_getstr(cfg_item, "name");
 
+	// Set name field
+	tmp = cfg_getstr(cfg_item, "name");
+	if (tmp == 0) {
+		mod->setLoadErr("No value for field 'name'");
+		delete(sg);
+		return NULL;
+	}
+	sg->name = std::string(tmp);
+
+	// Determine filename
+	tmp = cfg_getstr(cfg_item, "file");
+	if (tmp == 0) {
+		mod->setLoadErr("No value for field 'file'");
+		delete(sg);
+		return NULL;
+	}
 	filename = "songs/";
-	filename.append(cfg_getstr(cfg_item, "file"));
-	SDL_RWops * rw = mod->loadRWops(filename);
+	filename.append(tmp);
+
+	// Read file
+	SDL_RWops *rw = mod->loadRWops(filename);
+	if (rw == 0) {
+		mod->setLoadErr("Unable to read file '%s'", filename.c_str());
+		delete(sg);
+		return NULL;
+	}
+
+	// Load file
+	#ifdef __EMSCRIPTEN__
+	sg->music = Mix_LoadMUS_RW(rw);		// leaks memory
+	#else
 	sg->music = Mix_LoadMUS_RW(rw, 1);
-	if (sg->music == NULL) return NULL;
+	#endif
+
+	if (sg->music == NULL) {
+		mod->setLoadErr("Unable to load file '%s'", filename.c_str());
+		delete(sg);
+		return NULL;
+	}
 
 	return sg;
 }
@@ -53,4 +87,3 @@ Song::~Song()
 {
 	Mix_FreeMusic(this->music);
 }
-

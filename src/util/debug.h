@@ -3,10 +3,6 @@
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
 #pragma once
-#include "../rage.h"
-
-using namespace std;
-
 
 // Debugging messages
 // Not used anywhere near as often as they should be used
@@ -14,8 +10,10 @@ using namespace std;
 	#define WHEREARG __FILE__, __LINE__
 	#define DEBUGPRINT2(...) write_debug(__VA_ARGS__)
 	#define DEBUG(_sect, _fmt, ...) DEBUGPRINT2(_sect, WHEREARG, _fmt, __VA_ARGS__)
+	#define DEBUGSTR(_sect, _fmt) DEBUGPRINT2(_sect, WHEREARG, _fmt)
 #else
 	#define DEBUG(_sect, _fmt, ...) /* nothing! */
+	#define DEBUGSTR(_sect, _fmt) /* nothing! */
 #endif
 
 void write_debug(const char * sect, const char * file, int line, const char * fmt, ...);

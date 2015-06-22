@@ -56,6 +56,14 @@ cfg_opt_t vehicletype_opts[] =
 	CFG_FLOAT((char*) "reverse-accel", 5.0f, CFGF_NONE),
 	CFG_FLOAT((char*) "reverse-max", 30.0f, CFGF_NONE),
 
+	CFG_FLOAT((char*) "wheel-radius", 0.3f, CFGF_NONE),
+	CFG_FLOAT((char*) "wheel-width", 0.15f, CFGF_NONE),
+	CFG_FLOAT((char*) "friction-slip", 500.0f, CFGF_NONE),
+	CFG_FLOAT((char*) "roll-influence", 0.2f, CFGF_NONE),
+	CFG_FLOAT((char*) "suspension-stiffness", 20.0f, CFGF_NONE),
+	CFG_FLOAT((char*) "damping-compression", 0.2f, CFGF_NONE),
+	CFG_FLOAT((char*) "damping-relaxation", 0.3f, CFGF_NONE),
+
 	CFG_STR((char*) "weapon-primary", (char*)"", CFGF_NONE),
 
 	CFG_SEC((char*) "damage", damage_opts, CFGF_MULTI),
@@ -95,12 +103,21 @@ VehicleType* loadItemVehicleType(cfg_t* cfg_item, Mod* mod)
 	wt->reverse_accel = (float)cfg_getfloat(cfg_item, "reverse-accel");
 	wt->reverse_max = (float)cfg_getfloat(cfg_item, "reverse-max");
 
+	wt->wheel_width = (float)cfg_getfloat(cfg_item, "wheel-radius");
+	wt->wheel_radius = (float)cfg_getfloat(cfg_item, "wheel-width");
+	wt->friction_slip = (float)cfg_getfloat(cfg_item, "friction-slip");
+	wt->roll_influence = (float)cfg_getfloat(cfg_item, "roll-influence");
+	wt->suspension_stiffness = (float)cfg_getfloat(cfg_item, "suspension-stiffness");
+	wt->damping_compression = (float)cfg_getfloat(cfg_item, "damping-compression");
+	wt->damping_relaxation = (float)cfg_getfloat(cfg_item, "damping-relaxation");
+	
 	// Load model
 	tmp = cfg_getstr(cfg_item, "model");
 	if (tmp != NULL && strlen(tmp) != 0) {
 		wt->model = mod->getAssimpModel(tmp);
 		if (! wt->model) {
 			mod->setLoadErr("Invalid model: %s", tmp);
+			delete(wt);
 			return NULL;
 		}
 		wt->col_shape = wt->model->getCollisionShape();
@@ -117,6 +134,7 @@ VehicleType* loadItemVehicleType(cfg_t* cfg_item, Mod* mod)
 		node.node = wt->model->findNode(tmp);
 		if (node.node == NULL) {
 			mod->setLoadErr("Node '%s' not found in model '%s'", tmp, wt->model->getName().c_str());
+			delete(wt);
 			return NULL;
 		}
 
@@ -132,6 +150,7 @@ VehicleType* loadItemVehicleType(cfg_t* cfg_item, Mod* mod)
 		wt->weapon_primary = mod->getWeaponType(tmp);
 		if (! wt->weapon_primary) {
 			mod->setLoadErr("Invalid primary weapon: %s", tmp);
+			delete(wt);
 			return NULL;
 		}
 	}
@@ -145,7 +164,7 @@ VehicleType* loadItemVehicleType(cfg_t* cfg_item, Mod* mod)
 	if (size == 0) {
 		VehicleTypeDamage * dam = new VehicleTypeDamage();
 		dam->health = 0;
-		dam->model = mod->getAssimpModel("null.blend");
+		dam->model = mod->getAssimpModel("null.dae");
 		wt->damage_models.push_back(dam);
 
 	} else {
@@ -153,13 +172,20 @@ VehicleType* loadItemVehicleType(cfg_t* cfg_item, Mod* mod)
 			cfg_t *cfg_damage = cfg_getnsec(cfg_item, "damage", j);
 
 			char * tmp = cfg_getstr(cfg_damage, "model");
-			if (tmp == NULL) return NULL;
+			if (tmp == NULL) {
+				delete(wt);
+				return NULL;
+			}
 
 			VehicleTypeDamage * dam = new VehicleTypeDamage();
 
 			dam->health = cfg_getint(cfg_damage, "health");
 			dam->model = mod->getAssimpModel(tmp);
-			if (! dam->model) return NULL;
+			if (! dam->model) {
+				delete(wt);
+				delete(dam);
+				return NULL;
+			}
 
 			wt->damage_models.push_back(dam);
 		}
@@ -209,4 +235,3 @@ VehicleTypeNode* VehicleType::getNode(VehicleNodeType type)
 	}
 	return NULL;
 }
-

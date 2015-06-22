@@ -2,14 +2,10 @@
 //
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
+#include "aitype.h"
 #include <iostream>
 #include <confuse.h>
-#include "../rage.h"
-#include "aitype.h"
 #include "mod.h"
-
-
-using namespace std;
 
 
 /**
@@ -38,6 +34,7 @@ AIType* loadItemAIType(cfg_t* cfg_item, Mod* mod)
 	tmp = cfg_getstr(cfg_item, "name");
 	if (tmp == NULL) {
 		mod->setLoadErr("Missing field 'name'");
+		delete(ai);
 		return NULL;
 	}
 	ai->name = std::string(tmp);
@@ -46,6 +43,7 @@ AIType* loadItemAIType(cfg_t* cfg_item, Mod* mod)
 	tmp = cfg_getstr(cfg_item, "script");
 	if (tmp == NULL) {
 		mod->setLoadErr("Missing field 'script'");
+		delete(ai);
 		return NULL;
 	}
 
@@ -58,6 +56,7 @@ AIType* loadItemAIType(cfg_t* cfg_item, Mod* mod)
 	tmp = mod->loadText(filename);
 	if (tmp == NULL) {
 		mod->setLoadErr("Unable to load stript: %s for ai %s", filename.c_str(), ai->name.c_str());
+		delete(ai);
 		return NULL;
 	}
 	ai->script = std::string(tmp);
@@ -68,5 +67,10 @@ AIType* loadItemAIType(cfg_t* cfg_item, Mod* mod)
 
 
 AIType::AIType()
+{
+	id = 0;
+}
+
+AIType::~AIType()
 {
 }

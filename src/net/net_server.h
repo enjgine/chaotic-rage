@@ -38,18 +38,34 @@ class NetServer {
 	private:
 		NetServer(const NetServer & disabledCopyConstuctor);
 
-	public:
-		bool update();
-		void listen();
+		/**
+		* Drop a client
+		**/
 		void dropClient(NetServerClientInfo *client);
 
+		/**
+		* Handle errors
+		**/
+		void error(string msg);
+
 	public:
+		/**
+		* Called every frame to update stuff
+		**/
+		bool update();
+
+		/**
+		* Set up listening on the network
+		**/
+		void listen();
+
 		// One method for each outgoing network message the server sends out
 		void addmsgInfoResp();
 		void addmsgJoinAcc(NetServerClientInfo *client);
 		void addmsgJoinRej();
 		void addmsgDataCompl();
 		void addmsgChat();
+		void addmsgHUD(HUDLabel *l);
 		void addmsgClientDrop(NetServerClientInfo *client);
 		void addmsgUnitState(Unit *u);
 		void addmsgWallState(Wall *w);
@@ -59,7 +75,6 @@ class NetServer {
 		void addmsgPickupState(Pickup *p);
 		void addmsgEntityRem(Entity *e);
 
-	public:
 		// One method for each incoming network message from the client
 		unsigned int handleInfoReq(NetServerClientInfo *client, Uint8 *data, unsigned int size);
 		unsigned int handleJoinReq(NetServerClientInfo *client, Uint8 *data, unsigned int size);

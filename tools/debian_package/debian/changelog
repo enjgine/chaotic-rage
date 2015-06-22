@@ -1,45 +1,5 @@
-chaoticrage (1.8ubuntu8~trusty5) trusty; urgency=low
+chaoticrage (1.14-1) unstable; urgency=low
 
-  * New snapshot from git repo master branch 20140812.
-  * Added icon and desktop file.
+  * Upstream 1.14 release (Closes: #784590)
 
- -- Magnus Espersson <magnusespersson@gmail.com>  Tue, 12 Aug 2014 13:18:58 +0200
-
-chaoticrage (1.8ubuntu8~trusty4) trusty; urgency=low
-
-  * New snapshot from git repo master branch 20140811.
-
- -- Magnus Espersson <magnusespersson@gmail.com>  Mon, 11 Aug 2014 11:29:06 +0200
-
-chaoticrage (1.8ubuntu8~trusty3) trusty; urgency=medium
-
-  * New snapshot from git repo master branch 20140802.
-  * Removed php5-cli from build-depends.
-
- -- Magnus Espersson <magnusespersson@gmail.com>  Sat, 02 Aug 2014 09:47:13 +0200
-
-chaoticrage (1.8ubuntu8~saucy1) saucy; urgency=medium
-
-  * Build for Ubuntu Saucy.
-  * Added copyright file.
-
- -- Magnus Espersson <magnusespersson@gmail.com>  Sun, 22 Jun 2014 17:09:35 +0200
-
-chaoticrage (1.8ubuntu8~trusty2) trusty; urgency=medium
-
-  * Build with minimal debian files linked from repo.
-  * Cleaned the changelog from test builds.
-
- -- Magnus Espersson <magnusespersson@gmail.com>  Sun, 22 Jun 2014 15:58:11 +0200
-
-chaoticrage (1.8ubuntu8~trusty1) trusty; urgency=medium
-
-  * Build for trusty.
-
- -- Magnus Espersson <magnusespersson@gmail.com>  Sun, 22 Jun 2014 13:04:38 +0200
-
-chaoticrage (1.8ubuntu7) saucy; urgency=medium
-
-  * Trying to fix depends issue with libglew.
-
- -- Magnus Espersson <magnusespersson@gmail.com>  Sun, 22 Jun 2014 12:17:47 +0200
+ -- Josh Heidenreich <josh.sickmate@gmail.com>  Wed, 10 Jun 2015 21:19:00 +0930

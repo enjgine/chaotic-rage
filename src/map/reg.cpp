@@ -4,10 +4,19 @@
 
 #include <iostream>
 #include <map>
+#include <confuse.h>
 #include "reg.h"
 #include "../mod/mod.h"
 
 using namespace std;
+
+
+// Main config
+static cfg_opt_t opts[] =
+{
+	CFG_STR((char*) "title", 0, CFGF_NONE),
+	CFG_END()
+};
 
 
 /**
@@ -15,10 +24,30 @@ using namespace std;
 **/
 void MapRegistry::find(string dir)
 {
-	maps.push_back(MapReg("therlor_valley", "Therlor Valley"));
-	maps.push_back(MapReg("lakeside", "Lakeside"));
-	maps.push_back(MapReg("stormy_desert", "Stormy Desert"));
-	maps.push_back(MapReg("caves", "Caves test"));
+	std::vector<string>* sysmaps;
+	std::vector<string>::iterator it;
+
+	sysmaps = getSystemMapNames();
+
+	for (it = sysmaps->begin(); it != sysmaps->end(); ++it) {
+		string filename = "maps/";
+		filename.append(*it);
+		filename.append("/metadata.conf");
+
+		cfg_t* cfg = cfg_init(opts, CFGF_NONE);
+		int result = cfg_parse(cfg, filename.c_str());
+
+		if (result == CFG_PARSE_ERROR) {
+			reportFatalError("Unable to parse map metadata " + filename);
+		} else if (result == CFG_SUCCESS) {
+			string title = cfg_getstr(cfg, "title");
+			maps.push_back(MapReg(*it, title));
+		}
+
+		cfg_free(cfg);
+	}
+
+	delete(sysmaps);
 }
 
 

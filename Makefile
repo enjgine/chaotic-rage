@@ -3,7 +3,13 @@
 # Build dir and sources dir
 OBJPATH=build
 SRCPATH=src
-LUAPKG=lua5.1
+
+# Verbose vs quiet builds
+ifdef VERBOSE
+	Q =
+else
+	Q = @
+endif
 
 
 # MXE cross-compiler environment
@@ -16,9 +22,10 @@ ifdef MXE
 	PATH := $(MXE)/usr/bin:$(PATH)
 	PLATFORM := $(OBJPATH)/win32.o
 	LIBS := -liphlpapi
-	LUAPKG := lua
 	POSTFIX := .exe
-
+	DONT_COMPILE = $(OBJPATH)/touch.o \
+		$(OBJPATH)/gui/controls_touch.o
+	LUA_CFLAGS := -DLUA_COMPAT_ALL
 
 # emscripten llvm to javascript compiler
 # Use it like this:
@@ -27,15 +34,26 @@ else ifdef EMSCRIPTEN
 	CXX := em++
 	CC := emcc
 	PLATFORM := $(OBJPATH)/emscripten.o
-
+	PKG_CONFIG_PATH := tools/emscripten/lib/pkgconfig
+	POSTFIX := .html
+	DONT_COMPILE = $(OBJPATH)/render_opengl/gl_debug_drawer.o \
+		$(OBJPATH)/render/render_null.o \
+		$(OBJPATH)/render/render_ascii.o \
+		$(OBJPATH)/render/render_debug.o \
+		$(OBJPATH)/touch.o \
+		$(OBJPATH)/gui/controls_touch.o
+	LUA_CFLAGS := -DLUA_COMPAT_ALL
 
 # Standard Linux build
 else
 	CXX ?= g++
 	CC ?= gcc
 	CFLAGS := -DGETOPT -Werror -Wall -MMD
-	LIBS := -lGL -lGLU -L/usr/X11R6/lib -lX11 -lm -lstdc++
+	LIBS := -lGL -lGLU -L/usr/X11R6/lib -lX11 -lfontconfig -lm -lstdc++
 	PLATFORM := $(OBJPATH)/linux.o
+	DONT_COMPILE = $(OBJPATH)/touch.o \
+		$(OBJPATH)/gui/controls_touch.o
+	LUA_CFLAGS := -DLUA_COMPAT_ALL -DLUA_USE_LINUX
 endif
 
 
@@ -43,7 +61,7 @@ endif
 ifdef DEBUG
 	CFLAGS := $(CFLAGS) -Og -ggdb
 else
-	CFLAGS := $(CFLAGS) -O2 -ffast-math
+	CFLAGS := $(CFLAGS) -O2 -g -ffast-math
 endif
 
 
@@ -60,16 +78,34 @@ FREETYPE_CONFIG := $(CROSS)freetype-config
 
 # cflags
 CFLAGS := $(shell export PATH=$(PATH);$(SDL2_CONFIG) --cflags) \
-	$(shell export PATH=$(PATH);$(PKG_CONFIG) gl glu glew $(LUAPKG) bullet assimp SDL2_mixer SDL2_image SDL2_net --cflags) \
+	$(shell export PATH=$(PATH) PKG_CONFIG_PATH=$(PKG_CONFIG_PATH);$(PKG_CONFIG) gl glu glew bullet assimp SDL2_mixer SDL2_image SDL2_net --cflags) \
 	$(shell export PATH=$(PATH);$(FREETYPE_CONFIG) --cflags) \
 	$(CFLAGS) \
-	-Itools/include -I$(SRCPATH) -I$(SRCPATH)/guichan -I$(SRCPATH)/confuse -I$(SRCPATH)/spark
+	-Itools/include -I$(SRCPATH) -I$(SRCPATH)/guichan -I$(SRCPATH)/confuse -I$(SRCPATH)/spark -I$(SRCPATH)/lua
 
 # libs
 LIBS := $(shell export PATH=$(PATH);$(SDL2_CONFIG) --libs) \
-	$(shell export PATH=$(PATH);$(PKG_CONFIG) glew $(LUAPKG) bullet assimp SDL2_mixer SDL2_image SDL2_net --libs) \
+	$(shell export PATH=$(PATH) PKG_CONFIG_PATH=$(PKG_CONFIG_PATH);$(PKG_CONFIG) glew bullet assimp SDL2_mixer SDL2_image SDL2_net --libs) \
 	$(shell export PATH=$(PATH);$(FREETYPE_CONFIG) --libs) \
 	$(LIBS)
+
+
+# We need really specific flags and libs for emscrpten
+ifdef EMSCRIPTEN
+	CFLAGS := -Itools/emscripten/include/bullet \
+		-Itools/emscripten/include/assimp \
+		-Itools/emscripten/include/SDL2 \
+		-Itools/emscripten/include/freetype2 \
+		-Itools/emscripten/include \
+		-Itools/include -Isrc -Isrc/guichan -Isrc/confuse -Isrc/spark -Isrc/lua \
+		-ffast-math
+	LIBS := -Ltools/emscripten/lib \
+		-lBulletSoftBody -lBulletDynamics -lBulletCollision -lLinearMath \
+		-lassimp \
+		-lSDL2_net \
+		-lfreetype
+endif
+
 
 # Extract the version from rage.h
 # Only used for releases
@@ -90,7 +126,7 @@ CPPFILES=$(wildcard \
 	$(SRCPATH)/entity/*.cpp \
 	$(SRCPATH)/fx/*.cpp \
 	$(SRCPATH)/util/*.cpp \
-	$(SRCPATH)/lua/*.cpp \
+	$(SRCPATH)/script/*.cpp \
 	$(SRCPATH)/gui/*.cpp \
 	$(SRCPATH)/http/*.cpp \
 	$(SRCPATH)/weapons/*.cpp \
@@ -107,14 +143,18 @@ CPPFILES=$(wildcard \
 	$(SRCPATH)/spark/RenderingAPIs/OpenGL/*.cpp \
 )
 
+CFILES=$(wildcard \
+	$(SRCPATH)/lua/*.c \
+)
+
 # The list of source files gets transformed into a list of obj files
-OBJFILES=$(patsubst $(SRCPATH)/%.cpp,$(OBJPATH)/%.o,$(CPPFILES))
+OBJFILES=$(patsubst $(SRCPATH)/%.cpp,$(OBJPATH)/%.o,$(CPPFILES)) $(patsubst $(SRCPATH)/%.c,$(OBJPATH)/%.o,$(CFILES))
 
 # Files which define main() methods
 OBJMAINS=$(OBJPATH)/client.o
 
 # Client = everything but the main() method files + some other bits
-OBJFILES_CLIENT=$(OBJPATH)/client.o $(PLATFORM) $(OBJPATH)/confuse/confuse.o $(OBJPATH)/confuse/lexer.o $(filter-out $(OBJMAINS), $(OBJFILES))
+OBJFILES_CLIENT=$(OBJPATH)/client.o $(PLATFORM) $(OBJPATH)/confuse/confuse.o $(OBJPATH)/confuse/lexer.o $(filter-out $(OBJMAINS) $(DONT_COMPILE), $(OBJFILES))
 
 # Dependencies of the source files
 DEPENDENCIES := $(OBJFILES:.o=.d)
@@ -133,19 +173,40 @@ all: chaoticrage
 -include $(DEPENDENCIES)
 
 
+help:		## This help dialog
+	@fgrep -h "##" Makefile | fgrep -v fgrep | sed -e 's/\\$$//' | sed -e 's/##//'
+
+
 chaoticrage: $(OBJFILES_CLIENT)
 	@echo [LINK] $@
-	@$(CXX) $(CFLAGS) $(OBJFILES_CLIENT) -o chaoticrage$(POSTFIX) $(LIBS)
+	$(Q)$(CXX) $(CFLAGS) $(LDFLAGS) $(OBJFILES_CLIENT) -o chaoticrage$(POSTFIX) $(LIBS)
 
 
+install:	## Install game in Linux environment
 install: chaoticrage
-	mkdir -p $(DESTPATH)/usr/bin
-	install chaoticrage $(DESTPATH)/usr/bin
+	mkdir -p $(DESTPATH)/usr/games
+	install chaoticrage $(DESTPATH)/usr/games
 
 	mkdir -p $(DESTPATH)/usr/share/chaoticrage
 	cp -r --no-preserve=ownership data $(DESTPATH)/usr/share/chaoticrage
 	cp -r --no-preserve=ownership maps $(DESTPATH)/usr/share/chaoticrage
 
+	mkdir -p $(DESTPATH)/usr/share/applications
+	cp -r --no-preserve=ownership tools/linux/install/chaoticrage.desktop $(DESTPATH)/usr/share/applications
+
+	mkdir -p $(DESTPATH)/usr/share/icons
+	cp -r --no-preserve=ownership tools/linux/install/chaoticrage.png $(DESTPATH)/usr/share/icons
+	
+	mkdir -p $(DESTPATH)/usr/local/man/man1
+	cp -r --no-preserve=ownership tools/linux/install/chaoticrage.1 $(DESTPATH)/usr/local/man/man1
+	gzip $(DESTPATH)/usr/local/man/man1/chaoticrage.1
+
+uninstall:	## Uninstall game in Linux environment
+	rm -f $(DESTPATH)/usr/games/chaoticrage
+	rm -fr $(DESTPATH)/usr/share/chaoticrage
+	rm -f $(DESTPATH)/usr/share/applications/chaoticrage.desktop
+	rm -f $(DESTPATH)/usr/share/icons/chaoticrage.png
+	rm -f $(DESTPATH)/usr/local/man/man1/chaoticrage.1.gz
 
 dist: $(SRCPATH) data maps
 	rm -rf $(DISTTMP)
@@ -155,9 +216,12 @@ dist: $(SRCPATH) data maps
 	cp LICENSE $(DISTTMP)
 	cp README.md $(DISTTMP)
 	cp COMPILE.md $(DISTTMP)
+	cp CHANGES $(DISTTMP)
 	cp -r $(SRCPATH) $(DISTTMP)
 	cp -r data $(DISTTMP)
 	cp -r maps $(DISTTMP)
+
+	rm $(DISTTMP)/data/cr/*.ttf
 
 	mkdir -p $(DISTTMP)/tools
 	mkdir -p $(DISTTMP)/tools/i18n
@@ -167,15 +231,34 @@ dist: $(SRCPATH) data maps
 	cp -r tools/include $(DISTTMP)/tools
 	cp -r tools/i18n $(DISTTMP)/tools
 	cp tools/linux/*.sh $(DISTTMP)/tools/linux/
+	cp -r tools/linux/install $(DISTTMP)/tools/linux/
 	chmod 755 $(DISTTMP)/tools/linux/*.sh
+
+	sed -i "s/\"git\"/\"$(VERSION)\"/" $(DISTTMP)/tools/linux/install/chaoticrage.1
 
 	tar -cvjf chaoticrage-linux-$(VERSION).tar.bz2 $(DISTTMP)
 
-	mkdir -p $(DISTTMP)/debian
-	cp -r tools/debian_package/debian $(DISTTMP)
-	cp tools/debian_package/chaoticrage.desktop $(DISTTMP)
-	cp orig/2d/game_icon.PNG $(DISTTMP)/chaoticrage.png
-	tar -cvJf chaoticrage_$(VERSION).orig.tar.xz $(DISTTMP)
+	rm -r $(DISTTMP)
+
+chaoticrage-linux-$(VERSION).tar.bz2: dist
+
+deb:		## Create signed Debian package
+deb: chaoticrage-linux-$(VERSION).tar.bz2
+	mv chaoticrage-linux-$(VERSION).tar.bz2 chaoticrage_$(VERSION).orig.tar.bz2
+	tar -xf chaoticrage_$(VERSION).orig.tar.bz2
+	mkdir $(DISTTMP)/debian
+	cp -r tools/debian_package/debian/* $(DISTTMP)/debian/
+	cd $(DISTTMP); debuild
+	rm -r $(DISTTMP)
+
+deb-ubuntu-ppa:	## Create signed Ubuntu package for PPA
+deb-ubuntu-ppa: chaoticrage-linux-$(VERSION).tar.bz2
+	mv chaoticrage-linux-$(VERSION).tar.bz2 chaoticrage_$(VERSION)ubuntu.orig.tar.bz2
+	tar -xf chaoticrage_$(VERSION)ubuntu.orig.tar.bz2
+	mkdir $(DISTTMP)/debian
+	cp -r tools/debian_package/debian/* $(DISTTMP)/debian/
+	cp -r tools/debian_package/ubuntu/* $(DISTTMP)/debian/
+	cd $(DISTTMP); debuild -S -sa
 	rm -r $(DISTTMP)
 
 
@@ -193,10 +276,17 @@ dist-bin: chaoticrage data maps
 	rm -r $(DISTTMP)
 
 
-clean:
+env:		## Print the environment
+	@echo $(CC)
+	@echo $(CXX)
+	@echo $(CFLAGS)
+	@echo $(LIBS)
+
+clean:		## Clean, removes generated build files
 	rm -f chaoticrage
 	rm -f $(OBJFILES)
 	rm -f $(patsubst $(SRCPATH)/%.cpp,$(OBJPATH)/%.d,$(CPPFILES))
+	rm -f $(patsubst $(SRCPATH)/%.c,$(OBJPATH)/%.d,$(CFILES))
 	rm -f $(OBJPATH)/linux.o $(OBJPATH)/linux.d
 	rm -f $(OBJPATH)/client.o $(OBJPATH)/client.d
 	rm -f $(OBJPATH)/emscripten.o $(OBJPATH)/emscripten.d
@@ -204,37 +294,41 @@ clean:
 	rm -f $(OBJPATH)/confuse/confuse.o $(OBJPATH)/confuse/confuse.d
 	rm -f $(OBJPATH)/confuse/lexer.o $(OBJPATH)/confuse/lexer.d
 
-
-cleaner:
+cleaner:	## Clean, removes the entire build folder
 	rm -f chaoticrage
 	rm -rf $(OBJPATH)/
 
 
 $(OBJPATH)/%.o: $(SRCPATH)/%.cpp $(SRCPATH)/rage.h Makefile
-	@echo [CC] $<
-	@mkdir -p `dirname $< | sed "s/$(SRCPATH)/$(OBJPATH)/"`
-	@$(CXX) $(CFLAGS) -o $@ -c $<
+	@echo [CXX] $<
+	$(Q)mkdir -p `dirname $< | sed "s/$(SRCPATH)/$(OBJPATH)/"`
+	$(Q)$(CXX) $(CFLAGS) -o $@ -c $<
 
 $(OBJPATH)/happyhttp.o: $(SRCPATH)/http/happyhttp.cpp $(SRCPATH)/http/happyhttp.h Makefile
-	@echo [CC] $<
-	@$(CXX) $(CFLAGS) -Wno-error -o $@ -c $<
+	@echo [CXX] $<
+	$(Q)$(CXX) $(CFLAGS) -Wno-error -o $@ -c $<
 
 $(OBJPATH)/confuse/%.o: $(SRCPATH)/confuse/%.c $(SRCPATH)/confuse/confuse.h Makefile
 	@echo [CC] $<
-	@mkdir -p $(OBJPATH)/confuse
-	@$(CC) $(CFLAGS) -Wno-error -o $@ -c $<
+	$(Q)mkdir -p $(OBJPATH)/confuse
+	$(Q)$(CC) $(CFLAGS) -Wno-error -o $@ -c $<
+
+$(OBJPATH)/lua/%.o: $(SRCPATH)/lua/%.c $(SRCPATH)/lua/lua.h Makefile
+	@echo [CC] $<
+	$(Q)mkdir -p $(OBJPATH)/lua
+	$(Q)$(CC) $(CFLAGS) $(LUA_CFLAGS) -o $@ -c $<
 
 $(OBJPATH)/linux.o: $(SRCPATH)/platform/linux.cpp $(SRCPATH)/platform/platform.h Makefile
-	@echo [CC] $<
-	@$(CXX) $(CFLAGS) -o $@ -c $<
+	@echo [CXX] $<
+	$(Q)$(CXX) $(CFLAGS) -o $@ -c $<
 
 $(OBJPATH)/win32.o: $(SRCPATH)/platform/win32.cpp $(SRCPATH)/platform/platform.h Makefile
-	@echo [CC] $<
-	@$(CXX) $(CFLAGS) -o $@ -c $<
+	@echo [CXX] $<
+	$(Q)$(CXX) $(CFLAGS) -o $@ -c $<
 
 $(OBJPATH)/emscripten.o: $(SRCPATH)/platform/emscripten.cpp $(SRCPATH)/platform/platform.h Makefile
-	@echo [CC] $<
-	@$(CXX) $(CFLAGS) -o $@ -c $<
+	@echo [CXX] $<
+	$(Q)$(CXX) $(CFLAGS) -o $@ -c $<
 
 
 ifeq ($(wildcard $(OBJPATH)/),)

@@ -62,7 +62,7 @@ class VehicleType
 
 		AssimpModel * model;
 		btCollisionShape* col_shape;
-		int health;
+		float health;
 		float mass;
 
 		bool land;
@@ -77,6 +77,14 @@ class VehicleType
 		float brake_max;
 		float reverse_accel;
 		float reverse_max;
+
+		float wheel_radius;
+		float wheel_width;
+		float friction_slip;
+		float roll_influence;
+		float suspension_stiffness;
+		float damping_compression;
+		float damping_relaxation;
 
 		WeaponType* weapon_primary;
 		vector <VehicleTypeDamage *> damage_models;

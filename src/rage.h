@@ -18,17 +18,10 @@
 
 // Engine features to optionally compile into the game
 #ifdef RELEASE
-	#define VERSION "1.8"
+	#define VERSION "1.14"
 #else
 	#define DEBUG_OPTIONS
 	#define VERSION "Git Master"
-#endif
-
-// For now we aren't going to support Spark particles on GLES devices
-#if defined(__ANDROID__)
-	#undef USE_SPARK
-#else
-	#define USE_SPARK 1
 #endif
 
 // Frames-per-second to run all in-game animations at.
@@ -132,8 +125,14 @@ enum DialogName {
 	QUIT,
 	TEXTBOX,
 	TEXTPROMPT,
+	LISTPROMPT,
 	WEAPONS,
+	ENVIRONMENT,
 };
+
+// Sound pointers
+struct Mix_Chunk;
+typedef Mix_Chunk* AudioPtr;
 
 // A buttload of class definitions for forward-decls.
 class AIType;
@@ -185,7 +184,6 @@ class PlayerState;
 class Render;
 class Render3D;
 class Song;
-class Sound;
 class ServerConfig;
 class UIUpdate;
 class Unit;

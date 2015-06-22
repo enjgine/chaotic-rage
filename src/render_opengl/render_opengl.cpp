@@ -48,10 +48,8 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#ifdef USE_SPARK
 #include "../spark/SPK.h"
 #include "../spark/SPK_GL.h"
-#endif
 
 #define BUFFER_MAX 200
 
@@ -62,6 +60,17 @@ using namespace std;
 * For VBO pointer offsets
 **/
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
+
+
+/**
+* Used for shadows
+**/
+glm::mat4 biasMatrix(
+	0.5, 0.0, 0.0, 0.0,
+	0.0, 0.5, 0.0, 0.0,
+	0.0, 0.0, 0.5, 0.0,
+	0.5, 0.5, 0.5, 1.0
+);
 
 
 /**
@@ -79,14 +88,15 @@ RenderOpenGL::RenderOpenGL(GameState* st, RenderOpenGLSettings* settings) : Rend
 	SDL_FreeSurface(icon);*/
 
 	this->window = NULL;
+	this->glcontext = NULL;
 	this->physicsdebug = NULL;
 	this->speeddebug = false;
 	this->viewmode = GameSettings::behindPlayer;
+	this->render_player = NULL;
+	this->render_player_pos = glm::vec3(0.0f);
 
-	#ifdef USE_SPARK
-	this->particle_renderer = new SPK::GL::GL2PointRenderer(1.0f);
-	this->st->particle_renderer = this->particle_renderer;
-	#endif
+	this->renderer_points = new SPK::GL::GL2PointRenderer(1.0f);
+	this->renderer_lines = new SPK::GL::GL2LineRenderer(0.05f, 1.0f);
 
 	this->sprite_vbo = 0;
 
@@ -97,7 +107,6 @@ RenderOpenGL::RenderOpenGL(GameState* st, RenderOpenGLSettings* settings) : Rend
 	this->settings = NULL;
 	this->setSettings(settings);
 
-	this->lights_changed = false;
 	this->shaders_loaded = false;
 }
 
@@ -107,18 +116,17 @@ RenderOpenGL::RenderOpenGL(GameState* st, RenderOpenGLSettings* settings) : Rend
 **/
 RenderOpenGL::~RenderOpenGL()
 {
-	delete(this->settings);
-
-	#ifdef USE_SPARK
-		delete(this->particle_renderer);
-	#endif
-
-	delete font;
-	delete gui_font;
-
-	SDL_GL_DeleteContext(this->glcontext);
+	delete this->settings;
+	delete this->renderer_points;
+	delete this->renderer_lines;
+	delete this->font;
+	delete this->gui_font;
 
 	// TODO: Delete all buffers, tex, etc.
+
+	#ifndef SDL1_VIDEO
+		SDL_GL_DeleteContext(this->glcontext);
+	#endif
 }
 
 
@@ -182,52 +190,52 @@ RenderOpenGLSettings* RenderOpenGL::getSettings()
 **/
 void RenderOpenGL::setScreenSize(int width, int height, bool fullscreen)
 {
-	int flags;
-
 	// On mobile devices, we force fullscreen
-	#if defined(__ANDROID__)
+	#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 		fullscreen = true;
 		GEng()->cconf->fullscreen = fullscreen;
 	#endif
 
-	// SDL flags
-	flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
-
-	if (fullscreen) {
-		// Set the resolution to same as the desktop
-		SDL_DisplayMode mode;
-		int result = SDL_GetDesktopDisplayMode(0, &mode);
-		if (result != 0) {
-			reportFatalError("Unable to determine current display mode");
+	// Fullscreen support
+	#ifdef SDL1_VIDEO
+		int flagsSDL = SDL_OPENGL;
+		if (fullscreen) flags |= SDL_FULLSCREEN;
+	#else
+		int flagsSDL = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
+		if (fullscreen) {
+			// Set the resolution to same as the desktop
+			SDL_DisplayMode mode;
+			int result = SDL_GetDesktopDisplayMode(0, &mode);
+			if (result != 0) {
+				reportFatalError("Unable to determine current display mode");
+			}
+			width = mode.w;
+			height = mode.h;
+			GEng()->cconf->width = width;
+			GEng()->cconf->height = height;
+			flagsSDL |= SDL_WINDOW_FULLSCREEN;
 		}
-		width = mode.w;
-		height = mode.h;
-
-		flags |= SDL_WINDOW_FULLSCREEN;
-	}
+	#endif
 
 	this->real_width = width;
 	this->real_height = height;
+
+	// If we're on a high-res Android device, make the GUIs larger
+	#if defined(__ANDROID__)
+		if (this->real_width > 640) {
+			GEng()->gui_scale = 2.0f;
+		}
+	#endif
 
 	// Window title
 	char title[BUFFER_MAX];
 	snprintf(title, BUFFER_MAX, "Chaotic Rage %s", VERSION);
 
 	// Create window
-	this->window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, flags);
-	if (this->window == NULL) {
-		char buffer[BUFFER_MAX];
-		snprintf(buffer, BUFFER_MAX, "Unable to set %ix%i video: %s\n", width, height, SDL_GetError());
-		reportFatalError(buffer);
-	}
+	#ifdef SDL1_VIDEO
+		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-	// GL context settings
-	#if defined(GLES)
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-
-	#elif defined(OpenGL)
+		// In SDL1, the context is created at the same time
 		if (this->settings->msaa >= 2) {
 			SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 			SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, this->settings->msaa);
@@ -235,27 +243,68 @@ void RenderOpenGL::setScreenSize(int width, int height, bool fullscreen)
 			SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
 			SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
 		}
-	#endif
 
-	// GL context creation
-	this->glcontext = SDL_GL_CreateContext(this->window);
-	if (this->glcontext == NULL) {
-		reportFatalError("Unable to create GL context");
+		this->window = SDL_SetVideoMode(width, height, 32, flags);
+	#else
+		if (this->window == NULL) {
+			this->window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, flagsSDL);
+		} else {
+			SDL_SetWindowSize(this->window, width, height);
+			if (fullscreen) {
+				flagsSDL = SDL_WINDOW_FULLSCREEN;
+			} else {
+				flagsSDL = 0;
+			}
+			SDL_SetWindowFullscreen(this->window, flagsSDL);
+		}
+	#endif
+	
+	// Did it work?
+	if (this->window == NULL) {
+		char buffer[BUFFER_MAX];
+		snprintf(buffer, BUFFER_MAX, "Unable to set %ix%i video: %s\n", width, height, SDL_GetError());
+		reportFatalError(buffer);
 	}
 
+	// Create OpenGL context
+	#ifndef SDL1_VIDEO
+		#if defined(GLES)
+			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+		#elif defined(OpenGL)
+			if (this->settings->msaa >= 2) {
+				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, this->settings->msaa);
+			} else {
+				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+			}
+		#endif
+
+		// GL context creation
+		if (this->glcontext == NULL) {
+			this->glcontext = SDL_GL_CreateContext(this->window);
+			if (this->glcontext == NULL) {
+				reportFatalError("Unable to create GL context");
+			}
+		}
+	#endif
+	
 	// SDL_Image
-	flags = IMG_INIT_PNG;
-	int initted = IMG_Init(flags);
-	if ((initted & flags) != flags) {
+	int flagsIMG = IMG_INIT_PNG;
+	int initted = IMG_Init(flagsIMG);
+	if ((initted & flagsIMG) != flagsIMG) {
 		reportFatalError("Failed to init required png support.");
 	}
 
-	// Check compat and init GLEW
-	#ifdef OpenGL
+	// Check OpenGL version
+	#if defined(OpenGL)
 		if (atof((char*) glGetString(GL_VERSION)) < 3.0) {
 			reportFatalError("OpenGL 3.0 or later is required, but not supported on this system");
 		}
 
+		// Init GLEW
 		GLenum err = glewInit();
 		if (GLEW_OK != err) {
 			GL_LOG("Glew Error: %s", glewGetErrorString(err));
@@ -266,19 +315,17 @@ void RenderOpenGL::setScreenSize(int width, int height, bool fullscreen)
 		if (! GL_ARB_framebuffer_object) {
 			reportFatalError("OpenGL 3.0 or the extension 'GL_ARB_framebuffer_object' not available.");
 		}
-	#endif
-
-	// Check compatibility - OpenGL ES
-	#ifdef GLES
+	#elif defined(GLES) && !defined(__EMSCRIPTEN__)
+		// Manually check compatibility - OpenGL ES
 		char *exts = (char *)glGetString(GL_EXTENSIONS);
 		if(!strstr(exts, "GL_OES_depth_texture")){
 			reportFatalError("OpenGL ES 2.0 extension 'GL_OES_depth_texture' not available");
 		}
 	#endif
 
-	#ifdef USE_SPARK
-		this->particle_renderer->initGLbuffers();
-	#endif
+	// Init GL for particles
+	this->renderer_points->initGLbuffers();
+	this->renderer_lines->initGLbuffers();
 
 	// Windows only: Re-load textures.
 	// All other platforms don't destory the context if the window size changes
@@ -309,8 +356,10 @@ void RenderOpenGL::setScreenSize(int width, int height, bool fullscreen)
 **/
 void RenderOpenGL::setMouseGrab(bool newval)
 {
-	SDL_SetRelativeMouseMode(newval ? SDL_TRUE : SDL_FALSE);
-	SDL_SetWindowGrab(this->window, newval ? SDL_TRUE : SDL_FALSE);
+	#ifndef SDL1_VIDEO
+		SDL_SetRelativeMouseMode(newval ? SDL_TRUE : SDL_FALSE);
+		SDL_SetWindowGrab(this->window, newval ? SDL_TRUE : SDL_FALSE);
+	#endif
 }
 
 
@@ -319,6 +368,7 @@ void RenderOpenGL::setMouseGrab(bool newval)
 **/
 void RenderOpenGL::loadFont(string name, Mod* mod)
 {
+	// TODO: Menu to have it's own font
 	font = new OpenGLFont(this, name, mod, 20.0f);
 
 	// I don't quite know why this is here...
@@ -343,7 +393,7 @@ void RenderOpenGL::initGuichan(gcn::Gui * gui, Mod * mod)
 	gcn::Image::setImageLoader(imageLoader);
 
 	delete(gui_font);
-	gui_font = new OpenGLFont(this, "DejaVuSans.ttf", mod, 12.0f);
+	gui_font = new OpenGLFont(this, "DejaVuSans", mod, 12.0f * GEng()->gui_scale);
 	
 	try {
 		gcn::Widget::setGlobalFont(gui_font);
@@ -427,7 +477,7 @@ void RenderOpenGL::mouseRaycast(int x, int y, btVector3& start, btVector3& end)
 **/
 void RenderOpenGL::setPhysicsDebug(bool status)
 {
-#ifdef OpenGL
+#ifdef USE_DEBUG_DRAW
 	if (status) {
 		this->physicsdebug = new GLDebugDrawer();
 		this->physicsdebug->setDebugMode(
@@ -624,6 +674,7 @@ SpritePtr RenderOpenGL::loadCubemap(string filename_base, string filename_ext, M
 		SDL_RWops* rw = mod->loadRWops(filename);
 		if (rw == NULL) {
 			glDeleteTextures(1, &cubemap->pixels);
+			delete(cubemap);
 			return NULL;
 		}
 
@@ -631,6 +682,7 @@ SpritePtr RenderOpenGL::loadCubemap(string filename_base, string filename_ext, M
 		surf = IMG_Load_RW(rw, 0);
 		if (surf == NULL) {
 			glDeleteTextures(1, &cubemap->pixels);
+			delete(cubemap);
 			SDL_RWclose(rw);
 			return NULL;
 		}
@@ -642,6 +694,7 @@ SpritePtr RenderOpenGL::loadCubemap(string filename_base, string filename_ext, M
 		} else {
 			if (currWidth != surf->w || currHeight != surf->h) {
 				glDeleteTextures(1, &cubemap->pixels);
+				delete(cubemap);
 				SDL_RWclose(rw);
 				return NULL;
 			}
@@ -667,6 +720,7 @@ SpritePtr RenderOpenGL::loadCubemap(string filename_base, string filename_ext, M
 
 		} else {
 			glDeleteTextures(1, &cubemap->pixels);
+			delete(cubemap);
 			SDL_FreeSurface(surf);
 			SDL_RWclose(rw);
 			return NULL;
@@ -1040,6 +1094,9 @@ void RenderOpenGL::renderSprite(GLuint texture, int x, int y, int w, int h)
 void RenderOpenGL::preGame()
 {
 	glEnable(GL_DEPTH_TEST);
+	#ifndef __ANDROID__
+		glEnable(GL_DEPTH_CLAMP);
+	#endif
 	glEnable(GL_CULL_FACE);
 
 	#ifdef OpenGL
@@ -1061,6 +1118,10 @@ void RenderOpenGL::preGame()
 	if (this->shaders_error) {
 		reportFatalError("Error loading OpenGL shaders");
 	}
+	
+	// Set a few other vars
+	this->render_player = NULL;
+	this->torch = false;
 
 	// Setup all the uniforms and such
 	this->setupShaders();
@@ -1079,39 +1140,64 @@ void RenderOpenGL::preGame()
 
 /**
 * Set up shaders uniforms which are const throughout the game - lights, etc
+*
+* This used to be called once per game, but it's now once per player per frame
+* to allow for dynamic lights
 **/
 void RenderOpenGL::setupShaders()
 {
-	// Prep point lights...
-	// TODO: Think about dynamic lights?
 	glm::vec3 LightPos[4];
 	glm::vec4 LightColor[4];
 	unsigned int idx = 0;
+	
+	// TODO: Torch should be a directional light
+	if (this->torch && this->render_player != NULL) {
+		float inFront = 2.5f;
+		btVector3 offGround = btVector3(0.0f, 0.3f, 0.0f);
+
+		btTransform xform = this->render_player->getTransform();
+		btVector3 pos = xform.getOrigin() + offGround + xform.getBasis() * btVector3(0.0f, 0.0f, inFront);
+
+		LightPos[idx] = glm::vec3(pos.x(), pos.y() + 2.5f, pos.z());
+		LightColor[idx] = glm::vec4(0.5f, 0.5f, 0.5f, 0.5f);
+		idx++;
+	}
+
+	// TODO: Use the 4 closest light sources instead of just the first 4 in the list
 	for (unsigned int i = 0; i < this->lights.size(); i++) {
 		Light * l = this->lights[i];
 
 		if (l->type == 3) {
 			LightPos[idx] = glm::vec3(l->x, l->y, l->z);
-			LightColor[idx] = glm::vec4(l->diffuse[0], l->diffuse[1], l->diffuse[2], l->diffuse[3]);
+			LightColor[idx] = glm::vec4(l->diffuse[0], l->diffuse[1], l->diffuse[2], 1.0f);
 			idx++;
 			if (idx == 4) break;
 		}
 	}
-	
-	// ...and ambient too
-	glm::vec4 AmbientColor(this->st->map->ambient[0], this->st->map->ambient[1], this->st->map->ambient[2], 1.0f);
 
-	// Assign to phong shader
-	glUseProgram(this->shaders[SHADER_ENTITY_STATIC]->p());
-	glUniform3fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uLightPos"), idx, glm::value_ptr(LightPos[0]));
-	glUniform4fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uLightColor"), idx, glm::value_ptr(LightColor[0]));
-	glUniform4fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uAmbient"), 1, glm::value_ptr(AmbientColor));
+	// Make entities stand out a little when it's really dark
+	glm::vec4 entityAmbient = this->ambient;
+	if (st->time_of_day < 0.2f) {
+		entityAmbient += 0.05;
+	}
 
-	// And terrain
-	glUseProgram(this->shaders[SHADER_TERRAIN]->p());
-	glUniform3fv(this->shaders[SHADER_TERRAIN]->uniform("uLightPos"), idx, glm::value_ptr(LightPos[0]));
-	glUniform4fv(this->shaders[SHADER_TERRAIN]->uniform("uLightColor"), idx, glm::value_ptr(LightColor[0]));
-	glUniform4fv(this->shaders[SHADER_TERRAIN]->uniform("uAmbient"), 1, glm::value_ptr(AmbientColor));
+	// Update the uniforms for all shaders which have the 'lighting' flag set
+	for (map<int, GLShader*>::iterator it = this->shaders.begin(); it != this->shaders.end(); ++it) {
+		GLShader *shader = it->second;
+		if (shader->getUniformsLighting()) {
+			glUseProgram(shader->p());
+			glUniform3fv(shader->uniform("uLightPos"), 4, glm::value_ptr(LightPos[0]));
+			glUniform4fv(shader->uniform("uLightColor"), 4, glm::value_ptr(LightColor[0]));
+			glUniform4fv(shader->uniform("uAmbient"), 1, glm::value_ptr(entityAmbient));
+			glUniform1i(shader->uniform("uTex"), 0);
+			glUniform1i(shader->uniform("uShadowMap"), 1);
+			glUniform1i(shader->uniform("uNormal"), 2);
+		}
+	}
+
+	// Water only gets the 'ambient' set
+	glUseProgram(this->shaders[SHADER_WATER]->p());
+	glUniform4fv(this->shaders[SHADER_WATER]->uniform("uAmbient"), 1, glm::value_ptr(this->ambient));
 
 	CHECK_OPENGL_ERROR;
 }
@@ -1123,6 +1209,18 @@ void RenderOpenGL::setupShaders()
 void RenderOpenGL::postGame()
 {
 	delete(this->waterobj);
+
+	// Delete any `AnimPlay`s we still own
+	for (int i = this->animations.size() - 1; i >= 0; --i) {
+		delete(this->animations.at(i).play);
+	}
+	this->animations.clear();
+
+	// Delete any `Light`s we still own
+	for (int i = this->lights.size() - 1; i >= 0; --i) {
+		delete(this->lights.at(i));
+	}
+	this->lights.clear();
 }
 
 
@@ -1192,7 +1290,7 @@ void RenderOpenGL::loadShaders()
 	// Before the mod is loaded, we only need the basic shader
 	// It's are hardcoded (see above)
 	if (! this->shaders.count(SHADER_BASIC)) {
-		GLShader *shader = createProgram(pVS, pFS, "basic");
+		GLShader *shader = createProgram(pVS, pFS);
 		if (shader == NULL) {
 			reportFatalError("Error loading default OpenGL shader");
 		}
@@ -1204,12 +1302,17 @@ void RenderOpenGL::loadShaders()
 
 	base = GEng()->mm->getBase();
 
-	this->shaders[SHADER_ENTITY_BONES] = loadProgram(base, "bones");
-	this->shaders[SHADER_ENTITY_STATIC] = loadProgram(base, "phong");
+	this->shaders[SHADER_ENTITY_BONES] = loadProgram(base, "phong_bones", "phong");
+	this->shaders[SHADER_ENTITY_STATIC] = loadProgram(base, "phong_static", "phong");
+	this->shaders[SHADER_ENTITY_STATIC_BUMP] = loadProgram(base, "phong_static", "phong_bump");
+	this->shaders[SHADER_TERRAIN] = loadProgram(base, "phong_static", "phong_shadow");
 	this->shaders[SHADER_WATER] = loadProgram(base, "water");
-	this->shaders[SHADER_TERRAIN] = loadProgram(base, "terrain");
 	this->shaders[SHADER_TEXT] = loadProgram(base, "text");
 	this->shaders[SHADER_SKYBOX] = loadProgram(base, "skybox");
+
+	this->shaders[SHADER_WATER]->setUniformsLighting(false);
+	this->shaders[SHADER_TEXT]->setUniformsLighting(false);
+	this->shaders[SHADER_SKYBOX]->setUniformsLighting(false);
 
 	this->shaders_loaded = true;
 }
@@ -1253,33 +1356,36 @@ bool RenderOpenGL::reloadShaders()
 GLuint RenderOpenGL::createShader(const char* code, GLenum type)
 {
 	GLint success;
+	const char* strings[2];
+	int lengths[2];
 
 	GLuint shader = glCreateShader(type);
 	if (shader == 0) {
 		return 0;
 	}
 
+	// Different header based on GL variant
 	#ifdef GLES
-		char const *extra = "precision mediump float;";
-		char *srcmod = (char*) malloc(strlen(code) + strlen(extra) + 1);
-		srcmod[0] = '\0';
-		strcat(srcmod, extra);
-		strcat(srcmod, code);
-		GLint len = strlen(srcmod);
-		glShaderSource(shader, 1, (const GLchar**) &srcmod, &len);
-		free(srcmod);
-
+		strings[0] = "precision mediump float;\n";
 	#else
-		GLint len = strlen(code);
-		glShaderSource(shader, 1, &code, &len);
+		strings[0] = "#version 130\n";
 	#endif
+
+	strings[1] = code;
+	lengths[0] = strlen(strings[0]);
+	lengths[1] = strlen(strings[1]);
+
+	glShaderSource(shader, 2, strings, lengths);
 
 	glCompileShader(shader);
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
 	if (! success) {
 		GLchar InfoLog[1024];
 		glGetShaderInfoLog(shader, 1024, NULL, InfoLog);
-		GL_LOG("Error compiling shader:\n%s", InfoLog);
+		string log = string(InfoLog);
+		log = replaceString(log, "\n", "\n\t");
+		log = trimString(log);
+		GL_LOG("Error compiling shader:\n\t%s", log.c_str());
 		return 0;
 	}
 
@@ -1291,7 +1397,7 @@ GLuint RenderOpenGL::createShader(const char* code, GLenum type)
 * Creates and compile a shader program from two shader code strings
 * Returns the program id.
 **/
-GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment, string name)
+GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment)
 {
 	GLint success;
 	GLuint sVertex, sFragment;
@@ -1305,7 +1411,7 @@ GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment, 
 	// Create and attach vertex shader
 	sVertex = this->createShader(vertex, GL_VERTEX_SHADER);
 	if (sVertex == 0) {
-		GL_LOG("Invalid vertex shader: %s", name.c_str());
+		GL_LOG("Invalid vertex shader (program %u)", program);
 		return NULL;
 	}
 	glAttachShader(program, sVertex);
@@ -1313,7 +1419,7 @@ GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment, 
 	// Same with frag shader
 	sFragment = this->createShader(fragment, GL_FRAGMENT_SHADER);
 	if (sFragment == 0) {
-		GL_LOG("Invalid fragment shader: %s", name.c_str());
+		GL_LOG("Invalid fragment shader (program %u)", program);
 		return NULL;
 	}
 	glAttachShader(program, sFragment);
@@ -1327,6 +1433,7 @@ GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment, 
 	glBindAttribLocation(program, ATTRIB_TEXTCOORD, "vCoord");
 	glBindAttribLocation(program, ATTRIB_COLOR, "vColor");
 	glBindAttribLocation(program, ATTRIB_TANGENT, "vTangent");
+	glBindAttribLocation(program, ATTRIB_BITANGENT, "vBitangent");
 
 	// Link
 	glLinkProgram(program);
@@ -1338,7 +1445,7 @@ GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment, 
 	if (! success) {
 		GLchar infolog[1024];
 		glGetProgramInfoLog(program, 1024, NULL, infolog);
-		GL_LOG("Error linking program:\n%s", infolog);
+		GL_LOG("Error linking program\n%s", infolog);
 		return NULL;
 	}
 
@@ -1346,7 +1453,7 @@ GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment, 
 	glValidateProgram(program);
 	glGetProgramiv(program, GL_VALIDATE_STATUS, &success);
 	if (! success) {
-		GL_LOG("Program didn't validate: %s", name.c_str());
+		GL_LOG("Program didn't validate (program %u)", program);
 		return NULL;
 	}
 
@@ -1357,37 +1464,96 @@ GLShader* RenderOpenGL::createProgram(const char* vertex, const char* fragment, 
 
 
 /**
+* Convert GL shaders into ES shaders - vertex shader
+* Only works for a strict subset of GL shaders
+**/
+char* convertGLtoESv(const char* src)
+{
+	string str = string(src);
+
+	str = replaceString(str, "in ", "attribute ");
+	str = replaceString(str, "out ", "varying ");
+
+	char* out = (char*)malloc(str.length() + 1);
+	memcpy(out, str.c_str(), str.length() + 1);
+	return out;
+}
+
+
+/**
+* Convert GL shaders into ES shaders - fragment shader
+* Only works for a strict subset of GL shaders
+**/
+char* convertGLtoESf(const char* src)
+{
+	string str = string(src);
+
+	str = replaceString(str, "in ", "varying ");
+
+	char* out = (char*)malloc(str.length() + 1);
+	memcpy(out, str.c_str(), str.length() + 1);
+	return out;
+}
+
+
+/**
 * Load shaders using source found in a mod
 *
 * Will load the files:
-*   shaders/<name>.glslv (vertex)
-*   shaders/<name>.glslf (fragment)
+*   shaders_[gl|es]/<name>.glslv (vertex)
+*   shaders_[gl|es]/<name>.glslf (fragment)
 **/
 GLShader* RenderOpenGL::loadProgram(Mod* mod, string name)
+{
+	return this->loadProgram(mod, name, name);
+}
+
+
+/**
+* Load shaders using source found in a mod
+*
+* Will load the files:
+*   shaders_[gl|es]/<vertex_name>.glslv (vertex)
+*   shaders_[gl|es]/<fragment_name>.glslf (fragment)
+**/
+GLShader* RenderOpenGL::loadProgram(Mod* mod, string vertex_name, string fragment_name)
 {
 	char* v;
 	char* f;
 	GLShader* s;
 
-	#if defined(OpenGL)
-		v = mod->loadText("shaders_gl/" + name + ".glslv");
-		f = mod->loadText("shaders_gl/" + name + ".glslf");
-	#elif defined(GLES)
-		v = mod->loadText("shaders_es/" + name + ".glslv");
-		f = mod->loadText("shaders_es/" + name + ".glslf");
+	#ifdef GLES
+		// Specific ES shader or fallback to GL + hacks
+		char* tmpv = mod->loadText("shaders_es/" + vertex_name + ".glslv");
+		char* tmpf = mod->loadText("shaders_es/" + fragment_name + ".glslf");
+		if (tmpv != NULL && tmpf != NULL) {
+			v = tmpv;
+			f = tmpf;
+		} else {
+			tmpv = mod->loadText("shaders_gl/" + vertex_name + ".glslv");
+			tmpf = mod->loadText("shaders_gl/" + fragment_name + ".glslf");
+			v = convertGLtoESv(tmpv);
+			f = convertGLtoESf(tmpf);
+			free(tmpv);
+			free(tmpf);
+		}
+	#else
+		// Just use GL shaders directly
+		v = mod->loadText("shaders_gl/" + vertex_name + ".glslv");
+		f = mod->loadText("shaders_gl/" + fragment_name + ".glslf");
 	#endif
-
+	
 	if (v == NULL || f == NULL) {
 		free(v);
 		free(f);
-		GL_LOG("Unable to load shader program %s", name.c_str());
+		GL_LOG("Unable to load shader program %s %s", vertex_name.c_str(), fragment_name.c_str());
 		this->shaders_error = true;
 		return NULL;
 	}
 
 	CHECK_OPENGL_ERROR;
 
-	s = this->createProgram(v, f, name);
+	s = this->createProgram(v, f);
 
 	CHECK_OPENGL_ERROR;
 
@@ -1395,7 +1561,7 @@ GLShader* RenderOpenGL::loadProgram(Mod* mod, string name)
 	free(f);
 
 	if (s == NULL) {
-		GL_LOG("Unable to create shader program %s", name.c_str());
+		GL_LOG("Unable to create shader program %s %s", vertex_name.c_str(), fragment_name.c_str());
 		this->shaders_error = true;
 	}
 
@@ -1481,48 +1647,6 @@ void RenderOpenGL::createVBO(WavefrontObj * obj)
 
 
 /**
-* Call this before VBO render.
-* It's actually a noop in this renderer.
-**/
-void RenderOpenGL::preVBOrender()
-{
-}
-
-
-/**
-* Call this after VBO render, to clean up the OpenGL state.
-* It's actually a noop in this renderer.
-**/
-void RenderOpenGL::postVBOrender()
-{
-}
-
-
-/**
-* Renders a WavefrontObj.
-* This is only use by external callers (i.e. `Menu`).
-* Other parts of this class just do these bits themselves, but slightly differently each time.
-* Uses VBOs, so you gotta call preVBOrender() beforehand, and postVBOrender() afterwards.
-**/
-void RenderOpenGL::renderObj(WavefrontObj * obj, glm::mat4 mvp)
-{
-	GLShader *shader;
-	if (obj->count == 0) this->createVBO(obj);
-
-	shader = this->shaders[SHADER_BASIC];
-	glUseProgram(shader->p());
-
-	glUniformMatrix4fv(shader->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(mvp));
-
-	obj->vao->bind();
-	glDrawArrays(GL_TRIANGLES, 0, obj->count);
-
-	CHECK_OPENGL_ERROR;
-}
-
-
-
-/**
 * Sorts so that AnimPlay* instances with the same model are next to each other in the array
 **/
 bool sorter(const PlayEntity& a, const PlayEntity& b)
@@ -1581,12 +1705,22 @@ void RenderOpenGL::remAnimPlay(AnimPlay* play)
 **/
 void RenderOpenGL::entities()
 {
-	// Set VIEW matrix in the shaders
-	glUseProgram(this->shaders[SHADER_ENTITY_STATIC]->p());
-	glUniformMatrix4fv(this->shaders[SHADER_ENTITY_STATIC]->uniform("uV"), 1, GL_FALSE, glm::value_ptr(this->view));
-	glUseProgram(this->shaders[SHADER_ENTITY_BONES]->p());
-	glUniformMatrix4fv(this->shaders[SHADER_ENTITY_BONES]->uniform("uV"), 1, GL_FALSE, glm::value_ptr(this->view));
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, this->shadow_depth_tex);
+	glActiveTexture(GL_TEXTURE0);
 
+	// The uV (view) uniform only needs setting once per frame
+	// Find shaders used in scene, and set the unform for them
+	set<GLShader*> processed = set<GLShader*>();
+	for (vector<PlayEntity>::iterator it = animations.begin(); it != animations.end(); ++it) {
+		GLShader *shader = this->determineAssimpModelShader((*it).play->getModel());
+		if (processed.find(shader) == processed.end()) {
+			glUseProgram(shader->p());
+			glUniformMatrix4fv(shader->uniform("uV"), 1, GL_FALSE, glm::value_ptr(this->view));
+			processed.insert(shader);
+		}
+	}
+	
 	// Render!
 	for (vector<PlayEntity>::iterator it = animations.begin(); it != animations.end(); ++it) {
 		renderAnimPlay((*it).play, (*it).e);
@@ -1597,10 +1731,26 @@ void RenderOpenGL::entities()
 
 
 /**
-* Renders an animation.
-* Uses VBOs, so you gotta call preVBOrender() beforehand, and postVBOrender() afterwards.
+* For a given model, use heuristics to determine the correct shader to use
 *
-* TODO: This needs HEAPS more work with the new animation system
+* TODO: We might want a way for the model to *specify* the shader in the future
+**/
+GLShader* RenderOpenGL::determineAssimpModelShader(AssimpModel* am)
+{
+	if (!am->meshes[0]->bones.empty()) {
+		return this->shaders[SHADER_ENTITY_BONES];
+	}
+
+	if (am->materials[am->meshes[0]->materialIndex]->normal != NULL) {
+		return this->shaders[SHADER_ENTITY_STATIC_BUMP];
+	}
+
+	return this->shaders[SHADER_ENTITY_STATIC];
+}
+
+
+/**
+* Renders an animation.
 **/
 void RenderOpenGL::renderAnimPlay(AnimPlay * play, Entity * e)
 {
@@ -1621,31 +1771,30 @@ void RenderOpenGL::renderAnimPlay(AnimPlay* play, const glm::mat4 &modelMatrix)
 
 	am = play->getModel();
 
-	// Re-calc animation if needed
+	shader = this->determineAssimpModelShader(am);
+	glUseProgram(shader->p());
+
 	play->calcTransforms();
 
-	if (!am->meshes[0]->bones.empty()) {
-		// Bones
-		shader = this->shaders[SHADER_ENTITY_BONES];
-		glUseProgram(shader->p());
+	if (am->meshes[0]->bones.empty()) {
+		// Static meshes are very easy
+		recursiveRenderAssimpModelStatic(play, am, am->rootNode, shader, modelMatrix);
 
-		// Calculate stuff
+	} else {
+		// Calculate bone transforms
 		play->calcBoneTransforms();
 		glm::mat4 MVP = this->projection * this->view * modelMatrix;
+		glm::mat4 depthBiasMVP = biasMatrix * this->depthmvp * modelMatrix;
 
 		// Set uniforms
 		glUniformMatrix4fv(shader->uniform("uBones[0]"), MAX_BONES, GL_FALSE, &play->bone_transforms[0][0][0]);
 		glUniformMatrix4fv(shader->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(MVP));
 		glUniformMatrix4fv(shader->uniform("uM"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
+		glUniformMatrix3fv(shader->uniform("uMN"), 1, GL_FALSE, glm::value_ptr(glm::inverseTranspose(glm::mat3(modelMatrix))));
+		glUniformMatrix4fv(shader->uniform("uDepthBiasMVP"), 1, GL_FALSE, glm::value_ptr(depthBiasMVP));
 
 		// Do it
 		recursiveRenderAssimpModelBones(play, am, am->rootNode, shader);
-
-	} else {
-		// Static
-		shader = this->shaders[SHADER_ENTITY_STATIC];
-		glUseProgram(shader->p());
-		recursiveRenderAssimpModelStatic(play, am, am->rootNode, shader, modelMatrix);
 	}
 }
 
@@ -1665,16 +1814,26 @@ void RenderOpenGL::recursiveRenderAssimpModelStatic(AnimPlay* ap, AssimpModel* a
 {
 	glm::mat4 transform = modelMatrix * ap->getNodeTransform(nd);
 	glm::mat4 MVP = this->projection * this->view * transform;
+	glm::mat4 depthBiasMVP = biasMatrix * this->depthmvp * transform;
 
 	// Set uniforms
 	glUniformMatrix4fv(shader->uniform("uMVP"), 1, GL_FALSE, glm::value_ptr(MVP));
 	glUniformMatrix4fv(shader->uniform("uM"), 1, GL_FALSE, glm::value_ptr(transform));
 	glUniformMatrix3fv(shader->uniform("uMN"), 1, GL_FALSE, glm::value_ptr(glm::inverseTranspose(glm::mat3(transform))));
-	
+	glUniformMatrix4fv(shader->uniform("uDepthBiasMVP"), 1, GL_FALSE, glm::value_ptr(depthBiasMVP));
+
 	// Render meshes
 	for (vector<unsigned int>::iterator it = nd->meshes.begin(); it != nd->meshes.end(); ++it) {
 		AssimpMesh* mesh = am->meshes[(*it)];
 
+		glActiveTexture(GL_TEXTURE2);
+		if (am->materials[mesh->materialIndex]->normal == NULL) {
+			glBindTexture(GL_TEXTURE_2D, 0);
+		} else {
+			glBindTexture(GL_TEXTURE_2D, am->materials[mesh->materialIndex]->normal->pixels);
+		}
+
+		glActiveTexture(GL_TEXTURE0);
 		if (am->materials[mesh->materialIndex]->diffuse == NULL) {
 			glBindTexture(GL_TEXTURE_2D, 0);
 		} else {
@@ -1731,7 +1890,6 @@ void RenderOpenGL::recursiveRenderAssimpModelBones(AnimPlay* ap, AssimpModel* am
 void RenderOpenGL::addLight(Light* light)
 {
 	this->lights.push_back(light);
-	this->lights_changed = true;
 }
 
 
@@ -1741,7 +1899,24 @@ void RenderOpenGL::addLight(Light* light)
 void RenderOpenGL::remLight(Light* light)
 {
 	this->lights.erase(std::remove(this->lights.begin(), this->lights.end(), light), this->lights.end());
-	this->lights_changed = true;
+}
+
+
+/**
+* Set the state of the torch
+**/
+void RenderOpenGL::setTorch(bool on)
+{
+	this->torch = on;
+}
+
+
+/**
+* Set ambient light
+**/
+void RenderOpenGL::setAmbient(glm::vec4 ambient)
+{
+	this->ambient = ambient;
 }
 
 
@@ -1750,7 +1925,7 @@ void RenderOpenGL::remLight(Light* light)
 *
 * Note that the Y is for the baseline of the text.
 **/
-void RenderOpenGL::renderText(string text, float x, float y, float r, float g, float b, float a)
+void RenderOpenGL::renderText(string text, int x, int y, float r, float g, float b, float a)
 {
 	this->font->drawString(NULL, text, x, y, r, g, b, a);
 }
@@ -1773,19 +1948,15 @@ void RenderOpenGL::render()
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	if (this->lights_changed) {
-		this->setupShaders();
-		this->lights_changed = false;
-	}
-
 	entitiesShadowMap();
 
 	for (unsigned int i = 0; i < this->st->num_local; i++) {
 		this->render_player = this->st->local_players[i]->p;
 
 		this->mainViewport(i, this->st->num_local);
+		this->mainRot();
+		this->setupShaders();
 
-		mainRot();
 		terrain();
 		entities();
 		skybox();
@@ -1806,7 +1977,11 @@ void RenderOpenGL::render()
 
 	CHECK_OPENGL_ERROR;
 
-	SDL_GL_SwapWindow(this->window);
+	#ifdef SDL1_VIDEO
+		SDL_GL_SwapBuffers();
+	#else
+		SDL_GL_SwapWindow(this->window);
+	#endif
 }
 
 
@@ -1815,7 +1990,7 @@ void RenderOpenGL::render()
 **/
 void RenderOpenGL::physics()
 {
-#ifdef OpenGL
+#ifdef USE_DEBUG_DRAW
 	CHECK_OPENGL_ERROR;
 
 	glUseProgram(0);
@@ -1828,15 +2003,6 @@ void RenderOpenGL::physics()
 	glMultMatrixf(glm::value_ptr(MVP));
 
 	st->physics->getWorld()->debugDrawWorld();
-
-	for (list<DebugLine*>::iterator it = st->lines.begin(); it != st->lines.end(); ++it) {
-		glBegin(GL_LINES);
-			glColor3f(1.f, 0.5f, 0.f);
-			glVertex3d((*it)->a->getX(), (*it)->a->getY(), (*it)->a->getZ());
-			glColor3f(1.f, 0.0f, 0.f);
-			glVertex3d((*it)->b->getX(), (*it)->b->getY(), (*it)->b->getZ());
-		glEnd();
-	}
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_TEXTURE_2D);
@@ -1864,34 +2030,30 @@ void RenderOpenGL::mainRot()
 		dist = 80.0f;
 		lift = 0.0f;
 		angle = st->game_time / 100.0f;
+
 	} else {
-		switch (this->viewmode) {
-			case GameSettings::behindPlayer:
-				tilt = 17.0f;
-				dist = 25.0f;
-				lift = 0.0f;
-				break;
+		if (this->viewmode == GameSettings::firstPerson || this->render_player->getWeaponZoom() > 0.0f) {
+			tilt = 0.0f;
+			dist = 0.0f - this->render_player->getWeaponZoom();
+			lift = UNIT_PHYSICS_HEIGHT / 2.3f;
 
-			case GameSettings::abovePlayer:
-				tilt = 60.0f;
-				dist = 50.0f;
-				lift = 0.0f;
-				break;
+		} else if (this->viewmode == GameSettings::behindPlayer) {
+			tilt = 17.0f;
+			dist = 25.0f;
+			lift = 0.0f;
 
-			case GameSettings::firstPerson:
-				tilt = 0.0f;
-				dist = 0.0f;
-				lift = 1.72f;
-				break;
+		} else if (this->viewmode == GameSettings::abovePlayer) {
+			tilt = 60.0f;
+			dist = 50.0f;
+			lift = 0.0f;
 
-			default:
-				cerr << "ERROR: Wrong viewmode: " << this->viewmode << endl;
-				// Try to fix it
-				this->viewmode = GameSettings::behindPlayer;
-				tilt = 17.0f;
-				dist = 25.0f;
-				lift = 0.0f;
-				break;
+		} else {
+			// That's odd. Fix it.
+			cerr << "ERROR: Wrong viewmode: " << this->viewmode << endl;
+			this->viewmode = GameSettings::behindPlayer;
+			tilt = 17.0f;
+			dist = 25.0f;
+			lift = 0.0f;
 		}
 
 		// Load the character details into the variables
@@ -1906,7 +2068,7 @@ void RenderOpenGL::mainRot()
 		} else {
 			trans = this->render_player->getTransform();
 			angle = this->render_player->mouse_angle + 180.0f;
-			if (this->viewmode == GameSettings::firstPerson) {
+			if (this->viewmode == GameSettings::firstPerson || this->render_player->getWeaponZoom() > 0.0f) {
 				tilt -= this->render_player->vertical_angle;
 			}
 		}
@@ -1928,6 +2090,9 @@ void RenderOpenGL::mainRot()
 	this->view = glm::rotate(this->view, 360.0f - angle, glm::vec3(0.0f, 1.0f, 0.0f));
 	this->view = glm::translate(this->view, -this->camera);
 
+	// Set the player position which is used in other areas
+	this->render_player_pos = glm::vec3(trans.getOrigin().x(), trans.getOrigin().y(), trans.getOrigin().z());
+	
 	CHECK_OPENGL_ERROR;
 }
 
@@ -2011,7 +2176,13 @@ void RenderOpenGL::skybox()
 	glCullFace(GL_FRONT);
 
 	glm::mat4 modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(st->map->skybox_size.x*0.5f, st->map->skybox_size.y*0.5f, st->map->skybox_size.z*0.5f)),
+
+	if (this->st->map->skybox_inf) {
+		modelMatrix = glm::translate(modelMatrix, this->render_player_pos);
+	} else {
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(st->map->skybox_size.x*0.5f, st->map->skybox_size.y*0.5f, st->map->skybox_size.z*0.5f));
+	}
+
 	modelMatrix = glm::scale(modelMatrix, st->map->skybox_size);
 	modelMatrix = glm::rotate(modelMatrix, 90.0f, glm::vec3(0.0f, 1.0f, 0.0f));
 
@@ -2041,15 +2212,6 @@ void RenderOpenGL::terrain()
 	glActiveTexture(GL_TEXTURE0);
 
 	glUseProgram(s->p());
-	glUniform1i(s->uniform("uTex"), 0);
-	glUniform1i(s->uniform("uShadowMap"), 1);
-
-	glm::mat4 biasMatrix(
-		0.5, 0.0, 0.0, 0.0,
-		0.0, 0.5, 0.0, 0.0,
-		0.0, 0.0, 0.5, 0.0,
-		0.5, 0.5, 0.5, 1.0
-	);
 
 	// Heightmaps
 	for (vector<Heightmap*>::iterator it = this->st->map->heightmaps.begin(); it != this->st->map->heightmaps.end(); ++it) {
@@ -2143,16 +2305,15 @@ void RenderOpenGL::water()
 **/
 void RenderOpenGL::particles()
 {
-	#ifdef USE_SPARK
-		glEnable(GL_BLEND);
+	glEnable(GL_BLEND);
 
-		glm::mat4 vp = this->projection * this->view;
-		this->particle_renderer->setVP(vp);
+	glm::mat4 vp = this->projection * this->view;
+	this->renderer_points->setVP(vp);
+	this->renderer_lines->setVP(vp);
 
-		this->st->particle_system->render();
+	this->st->particle_system->render();
 
-		CHECK_OPENGL_ERROR;
-	#endif
+	CHECK_OPENGL_ERROR;
 }
 
 
@@ -2176,8 +2337,34 @@ void RenderOpenGL::fps()
 	float tick = GEng()->getAveTick();
 
 	snprintf(buf, BUFFER_MAX, "%.2f ms", tick);
-	this->renderText(buf, 400.0f, 50.0f);
+	this->renderText(buf, 400, 50);
 
 	snprintf(buf, BUFFER_MAX, "%.1f fps", 1000.0f/tick);
-	this->renderText(buf, 550.0f, 50.0f);
+	this->renderText(buf, 550, 50);
+
+	// Count up entities
+	int units = 0;
+	int vehicles = 0;
+	int objects = 0;
+	int pickups = 0;
+	int other = 0;
+	int total = 0;
+	for (list<Entity*>::iterator it = st->entities.begin(); it != st->entities.end(); ++it) {
+		Entity *e = (*it);
+		if (e->klass() == VEHICLE) {
+			vehicles++;
+		} else if (e->klass() == OBJECT) {
+			objects++;
+		} else if (e->klass() == PICKUP) {
+			pickups++;
+		} else if (e->klass() == UNIT) {
+			units++;
+		} else {
+			other++;
+		}
+		total++;
+	}
+
+	snprintf(buf, BUFFER_MAX, "U %i  V %i  O %i  P %i  ? %i  T %i", units, vehicles, objects, pickups, other, total);
+	this->renderText(buf, 400, 80);
 }

@@ -7,7 +7,6 @@
 
 class AnimPlay;
 class GameState;
-class Sound;
 class ObjectType;
 
 
@@ -18,19 +17,17 @@ class Object : public Entity
 
 	public:
 		ObjectType* ot;
-		int health;
+		float health;
 
 	protected:
 		AnimPlay * anim;
 
 	public:
-		Object(ObjectType *pt, GameState *st, float x, float y, float z, float angle);
+		Object(ObjectType *pt, GameState *st, float x, float z);
+		Object(ObjectType *pt, GameState *st, float x, float y, float z);
 		virtual ~Object();
 
 	public:
-		virtual Sound* getSound();
 		virtual void update(int delta);
-
-	public:
-		void takeDamage(int damage);
+		virtual void takeDamage(float damage);
 };

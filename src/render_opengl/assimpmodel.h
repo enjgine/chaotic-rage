@@ -72,7 +72,7 @@ class AssimpFace
 
 /**
 * A mesh. Contains pointers to face and vertex data.
-* Also cointains the material index
+* Also contains the material index
 **/
 class AssimpMesh
 {
@@ -188,6 +188,7 @@ class AssimpModel
 		float* boneWeights;
 		btVector3 boundingSize;
 		btCollisionShape *shape;
+		bool recenter;
 
 	protected:
 		Mod *mod;
@@ -215,7 +216,7 @@ class AssimpModel
 
 		void loadMeshes(bool opengl, const struct aiScene* sc);
 		void loadMaterials(Render3D* render, const struct aiScene* sc);
-		SpritePtr loadTexture(Render3D* render, aiString path);
+		SpritePtr loadTexture(Render3D* render, aiString* path);
 		void loadMeshdata(bool update, const struct aiScene* sc);
 
 		void loadNodes(const struct aiScene* sc);
@@ -235,5 +236,5 @@ class AssimpModel
 		void setBoneNodes();
 
 		void createCollisionShape();
+		bool wasRecentered() { return this->recenter; }
 };
-

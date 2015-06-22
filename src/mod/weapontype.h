@@ -4,11 +4,6 @@
 
 #pragma once
 #include "../rage.h"
-#include "../util/quadratic.h"
-
-
-using namespace std;
-
 
 #define WEAPON_SOUND_BEGIN 1
 #define WEAPON_SOUND_REPEAT 2
@@ -17,23 +12,21 @@ using namespace std;
 #define WEAPON_SOUND_EMPTY 5
 
 
-
-
 class WeaponTypeSound
 {
 	public:
 		int id;
-		Sound * snd;
+		AudioPtr snd;
 		int type;
 };
 
 class WeaponType		// TODO: Should this be renamed to just "Weapon"?
 {
 	public:
-		string name;
+		std::string name;
 		CRC32 id;
 
-		string title;
+		std::string title;
 		GameState * st;
 		int type;
 
@@ -43,7 +36,7 @@ class WeaponType		// TODO: Should this be renamed to just "Weapon"?
 		int magazine_limit;
 		int belt_limit;
 
-		vector<WeaponTypeSound*> sounds;
+		std::vector<WeaponTypeSound*> sounds;
 		AssimpModel* model;
 
 		// Crosshair image and min/max size
@@ -51,16 +44,18 @@ class WeaponType		// TODO: Should this be renamed to just "Weapon"?
 		int crosshair_min;
 		int crosshair_max;
 
+		std::vector<float> zoom_levels;
+
 	public:
 		WeaponType();
 		virtual ~WeaponType() {}
-		Sound* getSound(int type);
+		AudioPtr getSound(int type);
 
 	public:
 		/**
 		* Called by the unit class when we should fire
 		**/
-		virtual void doFire(Unit *unit, btTransform &origin) = 0;
+		virtual void doFire(Unit *unit, btTransform &origin, float damage_multiplier) = 0;
 
 		/**
 		* Called by the associated ammo round to update stuff

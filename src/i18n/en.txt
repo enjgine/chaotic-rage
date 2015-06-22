@@ -15,6 +15,7 @@ MENU_QUIT         Quit
 # New game menu
 NEWGAME_TYPE             Game type
 NEWGAME_WEAPONS          Weapons
+NEWGAME_ENVIRONMENT      Environment
 NEWGAME_MAP              Map
 NEWGAME_UNIT             Unit type
 NEWGAME_VIEW             View mode
@@ -28,6 +29,15 @@ WEAPONS_STANDARD_UNIT    Standard unit weapons
 WEAPONS_STANDARD_GAME    Standard game type weapons
 WEAPONS_SAVE             Save weapon settings
 
+# Environment menu
+ENVIRONMENT_TIMEOFDAY    Time of day
+ENVIRONMENT_DAY_NIGHT    Day/night cycle
+ENVIRONMENT_RAIN         Amount of rain
+ENVIRONMENT_SNOW         Amount of snow
+ENVIRONMENT_RND_WEATHER  Random weather
+ENVIRONMENT_GT_WEATHER   Allow game type to change weather
+ENVIRONMENT_SAVE         Save environment settings
+
 # Network menu
 NETWORK_DIRECT           Direct
 NETWORK_LOCAL            Local
@@ -35,3 +45,17 @@ NETWORK_INTERNET         Internet
 NETWORK_HOSTNAME         Hostname
 NETWORK_REFRESH_LIST     Refresh list
 NETWORK_JOIN_GAME        Join game
+
+# Settings menu
+SETTINGS_MSAA            MSAA
+SETTINGS_TEX_FILTER      Tex Filter
+SETTINGS_LANGUAGE        Language
+SETTINGS_FULLSCREEN      Fullscreen
+SETTINGS_WIDTH           Screen width
+SETTINGS_HEIGHT          Screen height
+SETTINGS_SAVE            Save
+
+# In game
+GAME_QUIT                Quit? Really?
+GAME_YES                 Yes
+GAME_NO                  No

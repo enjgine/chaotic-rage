@@ -17,6 +17,10 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#ifdef __linux__
+	#include <fontconfig/fontconfig.h>
+#endif
+
 
 /**
 * Metadata and texture pointer for freetype characters
@@ -66,7 +70,6 @@ class OpenGLFont_Implementation
 OpenGLFont::OpenGLFont(RenderOpenGL* render, string name, Mod* mod, float size)
 {
 	int error;
-	Sint64 len;
 
 	// Basics
 	this->pmpl = new OpenGLFont_Implementation();
@@ -80,14 +83,47 @@ OpenGLFont::OpenGLFont(RenderOpenGL* render, string name, Mod* mod, float size)
 		reportFatalError("Freetype: Unable to init library.");
 	}
 
-	// Load file from mod
-	this->pmpl->buf = mod->loadBinary(name, &len);
-	if (this->pmpl->buf == NULL) {
-		reportFatalError("Freetype: Unable to load data");
-	}
+	// On Linux, the system font is found using fontconfig
+	#ifdef __linux__
+		FcConfig* config = FcInitLoadConfigAndFonts();
 
-	// Load face
-	error = FT_New_Memory_Face(this->pmpl->ft, (const FT_Byte *) this->pmpl->buf, (FT_Long)len, 0, &this->pmpl->face);
+		FcPattern* pat = FcPatternBuild(
+			NULL,
+			FC_FAMILY, FcTypeString, reinterpret_cast<const char*>(name.c_str()),
+			NULL
+		);
+		FcConfigSubstitute(config, pat, FcMatchPattern);
+		FcDefaultSubstitute(pat);
+
+		FcResult result;
+		FcPattern* font = FcFontMatch(config, pat, &result);
+		if (font == NULL) {
+			reportFatalError("Fontconfig: Unable to find font " + name);
+		}
+
+		FcChar8* filename = NULL;
+		if (FcPatternGetString(font, FC_FILE, 0, &filename) != FcResultMatch) {
+			reportFatalError("Fontconfig: No filename in fontconfig match");
+		}
+
+		error = FT_New_Face(this->pmpl->ft, reinterpret_cast<const char*>(filename), 0, &this->pmpl->face);
+
+		FcPatternDestroy(font);
+		FcPatternDestroy(pat);
+
+	#else
+		// All other systems use a file in the cr/ mod
+		Sint64 len;
+		name.append(".ttf");
+		this->pmpl->buf = mod->loadBinary(name, &len);
+		if (this->pmpl->buf == NULL) {
+			reportFatalError("Freetype: Unable to load data");
+		}
+
+		error = FT_New_Memory_Face(this->pmpl->ft, (const FT_Byte *) this->pmpl->buf, (FT_Long)len, 0, &this->pmpl->face);
+	#endif
+
+	// Handle errors
 	if (error == FT_Err_Unknown_File_Format) {
 		reportFatalError("Freetype: Unsupported font format");
 	} else if (error) {
@@ -262,18 +298,24 @@ void OpenGLFont::renderCharacter(Uint32 character, float &x, float &y)
 		error = FT_Render_Glyph(this->pmpl->face->glyph, FT_RENDER_MODE_NORMAL);
 		if (error) return;
 
-		int width = MAX(nextPowerOfTwo(slot->bitmap.width), 2);
-		int height = MAX(nextPowerOfTwo(slot->bitmap.rows), 2);
+		unsigned int width = MAX(nextPowerOfTwo(slot->bitmap.width), 2);
+		unsigned int height = MAX(nextPowerOfTwo(slot->bitmap.rows), 2);
 
 		GLubyte* gl_data = new GLubyte[2 * width * height];
 
-		for (int j = 0; j < height; j++) {
-			for (int i = 0; i < width; i++) {
-
-				gl_data[2*(i+j*width)] = gl_data[2*(i+j*width)+1] =
-					(i>=slot->bitmap.width || j>=slot->bitmap.rows) ?
-					0 : slot->bitmap.buffer[i + slot->bitmap.width*j];
-
+		for (unsigned int j = 0; j < height; j++) {
+			for (unsigned int i = 0; i < width; i++) {
+				int index = 2 * (i + j * width);
+				if (i >= static_cast<unsigned int>(slot->bitmap.width)
+				    ||
+				    j >= static_cast<unsigned int>(slot->bitmap.rows)
+				) {
+					gl_data[index] = 0;
+					gl_data[index + 1] = 0;
+				} else {
+					gl_data[index] = slot->bitmap.buffer[i + slot->bitmap.width * j];
+					gl_data[index + 1] = slot->bitmap.buffer[i + slot->bitmap.width * j];
+				}
 			}
 		}
 

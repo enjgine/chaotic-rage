@@ -39,6 +39,7 @@ cfg_opt_t weapontype_opts[] =
 	CFG_STR((char*) "crosshair", 0, CFGF_NONE),
 	CFG_INT((char*) "crosshair_min", 10, CFGF_NONE),
 	CFG_INT((char*) "crosshair_max", 20, CFGF_NONE),
+	CFG_FLOAT_LIST((char*) "zoom_levels", (char*)"", CFGF_NONE),
 
 	// Sounds
 	CFG_SEC((char*) "sound", weaponsound_opts, CFGF_MULTI),
@@ -201,12 +202,28 @@ WeaponType* loadItemWeaponType(cfg_t* cfg_item, Mod* mod)
 
 		char * tmp = cfg_getstr(cfg_sound, "sound");
 		if (tmp == NULL) {
+			mod->setLoadErr("No value for field 'sound'");
 			delete(wts);
+			delete(wt);
 			return NULL;
 		}
+
 		wts->snd = mod->getSound(tmp);
+		if (wts->snd == NULL) {
+			mod->setLoadErr("Unable to load sound file");
+			delete(wts);
+			delete(wt);
+			return NULL;
+		}
 
 		wt->sounds.push_back(wts);
+	}
+
+	// Load zoom levels. Level 0 is always no zoom
+	wt->zoom_levels.push_back(0.0f);
+	int num_zooms = cfg_size(cfg_item, "zoom_levels");
+	for (j = 0; j < num_zooms; j++) {
+		wt->zoom_levels.push_back((float)cfg_getnfloat(cfg_item, "zoom_levels", j));
 	}
 
 	return wt;
@@ -217,7 +234,7 @@ WeaponType* loadItemWeaponType(cfg_t* cfg_item, Mod* mod)
 * Returns a random sound which matches the specified type.
 * If it can't find a sound for that type, return NULL
 **/
-Sound* WeaponType::getSound(int type)
+AudioPtr WeaponType::getSound(int type)
 {
 	unsigned int j = 0;
 	unsigned int num = 0;

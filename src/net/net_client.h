@@ -42,9 +42,25 @@ class NetClient {
 		void update();
 
 	public:
-		NetGameinfo * attemptJoinGame(string address, int port, UIUpdate *ui);
+		/**
+		* Start the game join dance
+		**/
+		NetGameinfo* attemptJoinGame(string address, int port, UIUpdate *ui);
+
+		/**
+		* Download the game state
+		**/
 		bool downloadGameState();
+
+		/**
+		* Called before the game
+		**/
 		void preGame();
+
+		/**
+		* Handle errors
+		**/
+		void error(string msg);
 
 	public:
 		// One method for each outgoing network message the client sends out
@@ -54,7 +70,7 @@ class NetClient {
 		void addmsgDataCompl();
 		void addmsgChat();
 		void addmsgQuit();
-		void addmsgKeyMouseStatus(int x, int y, int delta, Uint8 k);
+		void addmsgKeyMouseStatus(int x, int y, int delta, Uint16 k);
 
 	public:
 		// One method for each incoming network message from the server
@@ -64,6 +80,7 @@ class NetClient {
 		unsigned int handleDataCompl(Uint8 *data, unsigned int size);
 		unsigned int handleChat(Uint8 *data, unsigned int size);
 		unsigned int handlePlayerDrop(Uint8 *data, unsigned int size);
+		unsigned int handleHUD(Uint8 *data, unsigned int size);
 
 		unsigned int handleUnitState(Uint8 *data, unsigned int size);
 		unsigned int handleWallState(Uint8 *data, unsigned int size);

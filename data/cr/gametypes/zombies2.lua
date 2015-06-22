@@ -1,5 +1,5 @@
 ----
-----  Lua script for the gametype "Zombies".
+----  Lua script for the gametype "Zombies 2".
 ----
 
 num_zombies = 0;
@@ -34,7 +34,7 @@ do_achivements = function()
 			
 			-- Do an ammo drop
 			show_alert_message("Do you need some more ammo?");
-			ammo_drop()
+			game.addPickupRand("ammo_current");
 		end;
 	end);
 end;
@@ -89,7 +89,7 @@ end);
 -- Handle unit deaths
 --
 bind_playerdied(function(slot)
-	show_alert_message("Just not good enough I see...");
+	show_alert_message("Just not good enough I see...", slot);
 	
 	do_score();
 	
@@ -119,6 +119,3 @@ bind_npcdied(function()
 		num_achive = num_achive + 10;
 	end;
 end);
-
-
-

@@ -8,7 +8,6 @@
 
 class AnimPlay;
 class GameState;
-class Sound;
 class btRigidBody;
 class btTransform;
 class btVector3;
@@ -17,6 +16,9 @@ class btVector3;
 using namespace std;
 
 
+/**
+* These roughly correspond with the various sub-classes of the Entity class
+**/
 enum EntityClass {
 	NONE = 0,
 	UNIT = 1,
@@ -28,9 +30,15 @@ enum EntityClass {
 };
 
 
+/**
+* The main entity class
+**/
 class Entity
 {
 	public:
+		/**
+		* Return the class of entity
+		**/
 		virtual EntityClass klass() const { return NONE; }
 
 	public:
@@ -49,12 +57,6 @@ class Entity
 
 	public:
 		/**
-		* Return Sounds for this entity
-		* This is going to change some time soon!
-		**/
-		virtual Sound* getSound() = 0;
-
-		/**
 		* Return the world transform for this entity
 		**/
 		virtual const btTransform &getTransform() const;
@@ -69,16 +71,21 @@ class Entity
 		**/
 		virtual void update(int delta) = 0;
 
+		/**
+		* Reduce health of entity, and possibly die too.
+		**/
+		virtual void takeDamage(float damage) {}
+
 	public:
 		/**
 		* Return the game state for this entity
 		**/
-		GameState * getGameState();
+		GameState* getGameState();
 
 		/**
-		* Called by entity code to indicate the death of itself
+		* Remove the entity from the game world
 		**/
-		void hasDied();
+		void remove();
 
 		/**
 		* Disable collision for this entity
@@ -89,9 +96,11 @@ class Entity
 		* Get position. Convinience method for transforms
 		**/
 		const btVector3& getPosition() const;
-
+		btVector3 getPositionByVal() const;
+		
 		/**
 		* Set position. Convinience method for transforms
 		**/
 		void setPosition(const btVector3 &p);
 };
+

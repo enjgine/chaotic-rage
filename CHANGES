@@ -1,0 +1,60 @@
+New in 1.14
+-----------
+* Removed all non-free artwork
+* 3D models are now generated using a script from the blender
+  originals
+* Copyright attribution is now listed for all models
+* Buildtool now generates signed builds for Android
+* Model loading doesn't recenter models with bones any more
+* Added vehicle and object damage
+* Linux now uses fontconfig and a native Deja Vu Sans font
+  rather than a bundled one
+* Command line option to specify alternate data path
+* Automatically find maps and mods, instead of the names
+  being hard-coded
+
+Data changes:
+* Removed the 'Australia Day' mod
+* 3D models are now generated using a script from the blender
+  originals
+
+
+New in 1.13
+-----------
+* Android controls update - two virtual joysticks
+* Linux installer - added a man page and menu item
+* Added a basic torch
+* Added a new scripting function - game.getPlayerFromSlot
+* Added option for mod to specify the model shown in the menu
+* Fixed compile on MXE by bringing Lua dependency in-tree
+* Fixed crashes when using Assimp 3.1.1
+* Fixed compile when using an older version of FreeType
+* Fixed crashes with bad arguments to --campaign and --arcade
+* Fixed crashes when using a non-3D renderers
+
+Data changes:
+* Removed calls to deprecated scripting functions
+* Fix zombie.dae scale
+* Spawn dead players as zombies in the next round
+
+
+New in 1.12
+-----------
+* UI scaling for Android, so everything isn't so tiny
+* A few other Android tweaks and fixes
+* Fixed font loading issues
+* Rotate head on vertical axis
+* Fix depth issues with close objects and HUD
+* Implemented STATIC sound type for units
+* Implemented spawn animations
+* Added incomplete Brazilian Portuguese translation
+* Some misc networking bugfixes
+* Added Spanish translation
+* Added couple of scripts for quick windows network testing
+* Vehicle wheel rotations
+
+Data changes:
+* Update unit types config for additional sounds
+* Lighting test data
+* Remove broken unit types
+* Updated 'ute' model

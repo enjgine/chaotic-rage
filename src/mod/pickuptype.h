@@ -13,7 +13,7 @@ using namespace std;
 #define PICKUP_TYPE_AMMO 2
 #define PICKUP_TYPE_POWERUP 3
 #define PICKUP_TYPE_CURSOR 4
-
+#define PICKUP_TYPE_COMBO 5
 
 class btCollisionShape;
 
@@ -29,6 +29,31 @@ class PickupTypeAdjust
 		float melee_damage;
 		float melee_delay;
 		float melee_cooldown;
+		bool invincible;
+		float weapon_damage;
+
+	public:
+		PickupTypeAdjust():
+			health(1.0f), max_speed(1.0f), melee_damage(1.0f), melee_delay(1.0f), melee_cooldown(1.0f), invincible(false), weapon_damage(1.0f)
+			{}
+};
+
+
+/**
+* Additional powerups which are applied if you get two at once
+**/
+class PowerupCombo
+{
+	public:
+		string second_name;
+		string benefit_name;
+		PickupType* second;		// Other powerup in the combo
+		PickupType* benefit;	// WHat you get from the combo
+		
+	public:
+		PowerupCombo()
+			: second_name(""), benefit_name(""), second(NULL), benefit(NULL)
+			{}
 };
 
 
@@ -41,18 +66,23 @@ class PickupType
 		string name;
 		CRC32 id;
 
+		// Common to all
 		AssimpModel * model;
 		btCollisionShape* col_shape;
 		int type;
 
-		// Weapon and ammo crates
+		// Weapon, ammo crates, and powerups which force the weapon
 		WeaponType* wt;
 
 		// Powerups, permanant and temporary changes
+		string title;
+		string message;
 		PickupTypeAdjust* perm;
 		PickupTypeAdjust* temp;
-		string title;
 		int delay;
+
+		// Powerup combos
+		vector<PowerupCombo> combos;
 
 	public:
 		PickupType();

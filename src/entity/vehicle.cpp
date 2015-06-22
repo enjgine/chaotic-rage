@@ -4,6 +4,7 @@
 
 #include "vehicle.h"
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <string>
 #include <vector>
 #include "../game_engine.h"
@@ -14,6 +15,7 @@
 #include "../rage.h"
 #include "../render_opengl/animplay.h"
 #include "../util/convert.h"
+#include "../fx/newparticle.h"
 #include "entity.h"
 
 class Unit;
@@ -23,26 +25,14 @@ class btVector3;
 using namespace std;
 
 
-/**
-* Defining suspension and wheel parameters
-* More info: https://code.google.com/p/jbullet-jme/wiki/PhysicsVehicleNode
-**/
-static float	wheelRadius = 0.3f;
-static float	wheelWidth = 0.3f;
-static float	frictionSlip = 10.0f; // 0.8 - Realistic car, 10000 - Kart racer
-static float	suspensionStiffness = 20.0f; // 10.0 - Offroad buggy, 50.0 - Sports car, 200.0 - F1 Car
-// k * 2.0 * btSqrt(suspensionStiffness)
-// k = 0.0 undamped & bouncy, k = 1.0 critical damping, k = 0.1 to 0.3 are good values
-static float	wheelsDampingCompression = 0.2f * 2.0 * btSqrt(suspensionStiffness);
-// k * 2.0 * btSqrt(suspensionStiffness), slightly larger than wheelsDampingCompression, k = 0.2 to 0.5
-static float	wheelsDampingRelaxation = 0.3f * 2.0 * btSqrt(suspensionStiffness);
-// Reduces the rolling torque. 0.0 = no roll, 1.0 = physical behaviour
-static float	rollInfluence = 0.1f;
+// Axle direction parameters
 static btVector3 wheelDirectionCS0(0,-1,0);
 static btVector3 wheelAxleCS(-1,0,0);
 
 
-
+/**
+* Protected contructor for subclassing
+**/
 Vehicle::Vehicle(GameState *st) : Entity(st)
 {
 	this->vehicle_raycaster = NULL;
@@ -56,23 +46,49 @@ Vehicle::Vehicle(GameState *st) : Entity(st)
 	this->wheel_shape = NULL;
 }
 
-Vehicle::Vehicle(VehicleType *vt, GameState *st, float mapx, float mapy) : Entity(st)
+
+/**
+* Create vehicle at Map X/Z coordinates (with Y calculated automatically)
+**/
+Vehicle::Vehicle(VehicleType *vt, GameState *st, float x, float z) : Entity(st)
 {
 	btVector3 size = vt->model->getBoundingSize();
 
 	btTransform trans = btTransform(
 		btQuaternion(btScalar(0), btScalar(0), btScalar(0)),
-		st->physics->spawnLocation(mapx, mapy, size.z())
+		st->physics->spawnLocation(x, z, size.z())
 	);
 
 	this->init(vt, st, trans);
 }
 
+
+/**
+* Create vehicle at X/Y/Z coordinates
+**/
+Vehicle::Vehicle(VehicleType *vt, GameState *st, float x, float y, float z) : Entity(st)
+{
+	btTransform trans = btTransform(
+		btQuaternion(btScalar(0), btScalar(0), btScalar(0)),
+		btVector3(x, y, z)
+	);
+
+	this->init(vt, st, trans);
+}
+
+
+/**
+* Create vehicle at location specified by a btTransform
+**/
 Vehicle::Vehicle(VehicleType *vt, GameState *st, btTransform &loc) : Entity(st)
 {
 	this->init(vt, st, loc);
 }
 
+
+/**
+* Set up physics for the vehicle
+**/
 void Vehicle::init(VehicleType *vt, GameState *st, btTransform &loc)
 {
 	this->vt = vt;
@@ -105,50 +121,55 @@ void Vehicle::init(VehicleType *vt, GameState *st, btTransform &loc)
 	// TODO: Optimize this for fixed turrets
 	{
 		btVector3 sizeHE = vt->model->getBoundingSizeHE();
-		btScalar suspensionRestLength(sizeHE.y() + 0.1f);
+		btScalar suspensionRestLength(0.6f);
 
-		this->wheel_shape = new btCylinderShapeX(btVector3(wheelWidth,wheelRadius,wheelRadius));
+		this->wheel_shape = new btCylinderShapeX(btVector3(vt->wheel_width, vt->wheel_radius, vt->wheel_radius));
 
 		btVector3 connectionPointCS0;
-		float connectionHeight = 0.0f;
+		float connectionHeight = -sizeHE.y() + 0.2f;
 		bool isFrontWheel = true;
 
-		connectionPointCS0 = btVector3(sizeHE.x(), connectionHeight, sizeHE.y());
-		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, wheelRadius, this->tuning, isFrontWheel);
+		connectionPointCS0 = btVector3(sizeHE.x() - vt->wheel_width, connectionHeight, sizeHE.z() - vt->wheel_radius);
+		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, vt->wheel_radius, this->tuning, isFrontWheel);
 
-		connectionPointCS0 = btVector3(-sizeHE.x(), connectionHeight, sizeHE.y());
-		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, wheelRadius, this->tuning, isFrontWheel);
+		connectionPointCS0 = btVector3(-sizeHE.x() + vt->wheel_width, connectionHeight, sizeHE.z() - vt->wheel_radius);
+		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, vt->wheel_radius, this->tuning, isFrontWheel);
 
 		if (vt->name.compare("tank") != 0) {
 			isFrontWheel = false;
 		}
-		connectionPointCS0 = btVector3(sizeHE.x(), connectionHeight, -sizeHE.y());
-		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, wheelRadius, this->tuning, isFrontWheel);
+		connectionPointCS0 = btVector3(sizeHE.x() - vt->wheel_width, connectionHeight, -sizeHE.z() + vt->wheel_radius);
+		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, vt->wheel_radius, this->tuning, isFrontWheel);
 
-		connectionPointCS0 = btVector3(-sizeHE.x(), connectionHeight, -sizeHE.y());
-		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, wheelRadius, this->tuning, isFrontWheel);
+		connectionPointCS0 = btVector3(-sizeHE.x() + vt->wheel_width, connectionHeight, -sizeHE.z() + vt->wheel_radius);
+		this->vehicle->addWheel(connectionPointCS0, wheelDirectionCS0, wheelAxleCS, suspensionRestLength, vt->wheel_radius, this->tuning, isFrontWheel);
 	}
 
 	// Set some wheel dynamics
 	for (int i = 0; i < this->vehicle->getNumWheels(); i++) {
 		btWheelInfo& wheel = this->vehicle->getWheelInfo(i);
-
-		wheel.m_suspensionStiffness = suspensionStiffness;
-		wheel.m_wheelsDampingRelaxation = wheelsDampingRelaxation;
-		wheel.m_wheelsDampingCompression = wheelsDampingCompression;
-		wheel.m_frictionSlip = frictionSlip;
-		wheel.m_rollInfluence = rollInfluence;
+		wheel.m_suspensionStiffness = vt->suspension_stiffness;
+		wheel.m_wheelsDampingRelaxation = vt->damping_relaxation * 2.0 * btSqrt(vt->suspension_stiffness);
+		wheel.m_wheelsDampingCompression = vt->damping_compression * 2.0 * btSqrt(vt->suspension_stiffness);
+		wheel.m_frictionSlip = vt->friction_slip;
+		wheel.m_rollInfluence = vt->roll_influence;
 	}
 }
 
+
+/**
+* Remove the vehicle
+**/
 Vehicle::~Vehicle()
 {
 	delete this->vehicle_raycaster;
-	delete this->vehicle;
 
 	st->remAnimPlay(this->anim);
 	delete this->anim;
 	this->anim = NULL;
+
+	st->physics->delAction(this->vehicle);
+	this->vehicle = NULL;
 
 	st->physics->delRigidBody(this->body);
 	this->body = NULL;
@@ -178,7 +199,7 @@ void Vehicle::trainAttachToNext(Vehicle *next)
 
 
 /**
-* Do stuff
+* Called every tick
 **/
 void Vehicle::update(int delta)
 {
@@ -206,17 +227,12 @@ void Vehicle::update(int delta)
 	this->vehicle->applyEngineForce(this->engineForce,wheelIndex);
 	this->vehicle->setBrake(this->brakeForce,wheelIndex);
 
-	// Update wheels
+	// Update wheel nodes
 	for (int i = 0; i < this->vehicle->getNumWheels(); i++) {
-		this->vehicle->updateWheelTransform(i, true);
-
-		// TODO: fix the transforms for turning and rotating of the wheels
-		//btTransform newTransform = this->vehicle->getWheelInfo(i).m_worldTransform;
-		//newTransform.setOrigin(newTransform.getOrigin() - this->vehicle->getChassisWorldTransform().getOrigin());
-
-		//btScalar m[16];
-		//newTransform.getOpenGLMatrix(m);
-		//this->setNodeTransformRelative(VEHICLE_NODE_WHEEL0 + i, glm::make_mat4(m));
+		glm::mat4 wheel = glm::mat4();
+		wheel = glm::rotate(wheel, glm::degrees(this->vehicle->getWheelInfo(i).m_steering), glm::vec3(0.0f, 0.0f, 1.0f));
+		wheel = glm::rotate(wheel, glm::degrees(this->vehicle->getWheelInfo(i).m_rotation), glm::vec3(-1.0f, 0.0f, 0.0f));
+		this->setNodeTransformRelative(VEHICLE_NODE_WHEEL0 + i, wheel);
 	}
 
 	// Send state over network
@@ -226,6 +242,9 @@ void Vehicle::update(int delta)
 }
 
 
+/**
+* Called when a unit enters the vehicle
+**/
 void Vehicle::enter()
 {
 	this->engineForce = 0.0f;
@@ -234,6 +253,9 @@ void Vehicle::enter()
 }
 
 
+/**
+* Called when a unit exits the vehicle
+**/
 void Vehicle::exit()
 {
 	this->engineForce = 0.0f;
@@ -285,12 +307,6 @@ void Vehicle::operate(Unit* u, int delta, int key_up, int key_down, int key_left
 }
 
 
-Sound* Vehicle::getSound()
-{
-	return NULL;
-}
-
-
 /**
 * Return the weapon transform for this vehicle
 **/
@@ -317,21 +333,12 @@ void Vehicle::getWeaponTransform(btTransform &xform)
 /**
 * We have been hit! Take some damage
 **/
-void Vehicle::takeDamage(int damage)
+void Vehicle::takeDamage(float damage)
 {
 	this->health -= damage;
-	if (this->health < 0) this->health = 0;
-
-	for (unsigned int j = 0; j < this->vt->damage_models.size(); j++) {
-		VehicleTypeDamage * dam = this->vt->damage_models.at(j);
-
-		if (this->health <= dam->health) {
-			st->remAnimPlay(this->anim);
-			delete(this->anim);
-			this->anim = new AnimPlay(dam->model);
-			st->addAnimPlay(this->anim, this);
-			break;
-		}
+	if (this->health <= 0.0f) {
+		create_particles_explosion(this->st, this->getTransform().getOrigin(), 100);
+		this->del = true;
 	}
 }
 
@@ -398,7 +405,7 @@ void Vehicle::setNodeTransformRelative(VehicleNodeType type, glm::mat4 transform
 
 	for (it = this->vt->nodes.begin(); it != this->vt->nodes.end(); ++it) {
 		if ((*it).type == type) {
-			this->anim->setMoveTransform((*it).node, (*it).node->transform * transform);
+			this->anim->setMoveTransform((*it).node, transform);
 			break;
 		}
 	}

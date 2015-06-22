@@ -31,6 +31,19 @@ cfg_opt_t adjust_opts[] =
 	CFG_FLOAT((char*) "melee-damage", 1.0f, CFGF_NONE),
 	CFG_FLOAT((char*) "melee-delay", 1.0f, CFGF_NONE),
 	CFG_FLOAT((char*) "melee-cooldown", 1.0f, CFGF_NONE),
+	CFG_BOOL((char*) "invincible", cfg_false, CFGF_NONE),
+	CFG_FLOAT((char*) "weapon-damage", 1.0f, CFGF_NONE),
+	CFG_END()
+};
+
+
+/**
+* Combos, for extra funness
+**/
+cfg_opt_t combo_opts[] =
+{
+	CFG_STR((char*) "second", (char*)"", CFGF_NONE),
+	CFG_STR((char*) "benefit", (char*)"", CFGF_NONE),
 	CFG_END()
 };
 
@@ -41,13 +54,17 @@ cfg_opt_t adjust_opts[] =
 cfg_opt_t pickuptype_opts[] =
 {
 	CFG_STR((char*) "name", 0, CFGF_NONE),
-	CFG_STR((char*) "title", (char*)"Powerup", CFGF_NONE),
 	CFG_STR((char*) "model", 0, CFGF_NONE),
 	CFG_INT((char*) "type", 0, CFGF_NONE),
 
+	// Powerups only
+	CFG_STR((char*) "title", (char*)"Powerup", CFGF_NONE),
+	CFG_STR((char*) "message", (char*)"", CFGF_NONE),
 	CFG_SEC((char*) "perm", adjust_opts, CFGF_NONE),
 	CFG_SEC((char*) "temp", adjust_opts, CFGF_NONE),
 	CFG_INT((char*) "delay", 15 * 1000, CFGF_NONE),		// default 15 secs
+	CFG_SEC((char*) "combo", combo_opts, CFGF_MULTI),
+	CFG_STR((char*) "set-weapon", (char*)"", CFGF_NONE),
 
 	CFG_END()
 };
@@ -102,21 +119,42 @@ PickupType* loadItemPickupType(cfg_t* cfg_item, Mod* mod)
 	char * tmp = cfg_getstr(cfg_item, "model");
 	if (tmp != NULL) {
 		pt->model = mod->getAssimpModel(tmp);
-		if (! pt->model) return NULL;
+		if (! pt->model) {
+			delete(pt);
+			return NULL;
+		}
 		pt->col_shape = pt->model->getCollisionShape();
 	}
 
 	// Powerups have a bunch more fields
 	if (pt->type == PICKUP_TYPE_POWERUP) {
 		pt->title = std::string(cfg_getstr(cfg_item, "title"));
+		pt->message = std::string(cfg_getstr(cfg_item, "message"));
 		pt->delay = cfg_getint(cfg_item, "delay");
 
+		// Forced weapon
+		char* tmp = cfg_getstr(cfg_item, "set-weapon");
+		if (tmp != NULL) {
+			pt->wt = mod->getWeaponType(tmp);
+		}
+
+		// Permanant and temporary adjustments
 		if (cfg_size(cfg_item, "perm") > 0) {
 			pt->perm = pt->loadAdjust(cfg_getnsec(cfg_item, "perm", 0));
 		}
-
 		if (cfg_size(cfg_item, "temp") > 0) {
 			pt->temp = pt->loadAdjust(cfg_getnsec(cfg_item, "temp", 0));
+		}
+
+		// Combos will be hooked up later
+		if (cfg_size(cfg_item, "combo") > 0) {
+			PowerupCombo combo;
+			for (unsigned int i = 0; i < cfg_size(cfg_item, "combo"); ++i) {
+				cfg_t* cfg_combo = cfg_getnsec(cfg_item, "combo", i);
+				combo.second_name = std::string(cfg_getstr(cfg_combo, "second"));
+				combo.benefit_name = std::string(cfg_getstr(cfg_combo, "benefit"));
+				pt->combos.push_back(combo);
+			}
 		}
 	}
 
@@ -136,6 +174,8 @@ PickupTypeAdjust* PickupType::loadAdjust(cfg_t* cfg)
 	pt->melee_damage = (float)cfg_getfloat(cfg, "melee-damage");
 	pt->melee_delay = (float)cfg_getfloat(cfg, "melee-delay");
 	pt->melee_cooldown = (float)cfg_getfloat(cfg, "melee-cooldown");
+	pt->invincible = (cfg_getbool(cfg, "invincible") == cfg_true);
+	pt->weapon_damage = (float)cfg_getfloat(cfg, "weapon-damage");
 
 	return pt;
 }
@@ -177,7 +217,18 @@ bool PickupType::doUse(Unit *u)
 		case PICKUP_TYPE_POWERUP:
 			u->applyPickupAdjust(this->perm);
 			u->applyPickupAdjust(this->temp);
-			st->addHUDMessage(u->slot, "Picked up a ", this->title);
+			u->addActivePickup(this);
+
+			if (!this->title.empty()) {
+				st->addHUDMessage(u->slot, "Picked up a ", this->title);
+			}
+
+			// Apply any combos
+			for (vector<PowerupCombo>::iterator it = this->combos.begin(); it != this->combos.end(); ++it) {
+				if ((*it).benefit != NULL && u->hasActivePickup((*it).second)) {
+					(*it).benefit->doUse(u);
+				}
+			}
 			break;
 
 		case PICKUP_TYPE_CURSOR:
@@ -201,4 +252,3 @@ void PickupType::finished(Unit *u)
 		u->rollbackPickupAdjust(this->temp);
 	}
 }
-

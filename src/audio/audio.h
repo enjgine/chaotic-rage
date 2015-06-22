@@ -3,7 +3,6 @@
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
 #pragma once
-#include <SDL.h>
 #include <SDL_mixer.h>
 #include <string>
 
@@ -11,9 +10,6 @@ class Entity;
 class GameState;
 class Mod;
 class Song;
-class Sound;
-
-using namespace std;
 
 
 typedef Mix_Chunk* AudioPtr;
@@ -33,13 +29,13 @@ class Audio
 		/**
 		* Loads a wav file into an AudioPtr
 		**/
-		virtual AudioPtr loadSound(string filename, Mod * mod) = 0;
+		virtual AudioPtr loadSound(std::string filename, Mod * mod) = 0;
 
 		/**
 		* Plays a sound
 		* Returns a sound id, or -1 on error
 		**/
-		virtual int playSound(Sound * snd, bool loop, Entity *e) = 0;
+		virtual int playSound(AudioPtr snd, bool loop, Entity *e) = 0;
 
 		/**
 		* Plays a song

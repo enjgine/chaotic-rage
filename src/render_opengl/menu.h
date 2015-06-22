@@ -22,6 +22,7 @@ class RenderOpenGL;
 class GameState;
 class GameManager;
 class GameSettings;
+class OpenGLFont;
 
 
 enum MenuCommand {
@@ -39,8 +40,8 @@ enum MenuCommand {
 class MenuItem {
 	public:
 		string name;
-		float x1, x2;
-		float y1, y2;
+		int x1, x2;
+		int y1, y2;
 		MenuCommand cmd;
 		bool hover;
 };
@@ -51,7 +52,9 @@ class Menu : public UIUpdate
 	private:
 		GameState *st;
 		GameManager *gm;
+		Mod *base_mod;
 		RenderOpenGL *render;
+		OpenGLFont* font;
 		int running;
 		vector<MenuItem*> menuitems;
 		vector<Dialog*> openDialogs;
@@ -112,5 +115,7 @@ class Menu : public UIUpdate
 		void startCampaign(Campaign* c, string unittype, GameSettings::ViewMode viewmode, unsigned int num_local);
 		void startGame(MapReg *map, string gametype, string unittype, GameSettings::ViewMode viewmode, unsigned int num_local, bool host, GameSettings* gs);
 		void networkJoin(string host);
+		
+		// Handle a res change from the settings screen
+		void handleScreenResChange();
 };
-

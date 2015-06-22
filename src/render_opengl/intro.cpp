@@ -25,7 +25,7 @@ Intro::Intro(GameState *st)
 {
 	mod = new Mod(st, "data/intro");
 	if (!mod) {
-		reportFatalError("Intro failed to load. Is the working directory correct?");
+		reportFatalError("Intro mod failed to load. Is the working directory correct?");
 	}
 
 	this->st = st;
@@ -35,7 +35,12 @@ Intro::Intro(GameState *st)
 	sg->name = "intro";
 
 	SDL_RWops * rw = mod->loadRWops("intro.ogg");
-	sg->music = Mix_LoadMUS_RW(rw, 0);				// does this leak?
+
+	#ifdef __EMSCRIPTEN__
+	sg->music = Mix_LoadMUS_RW(rw);		// leaks memory
+	#else
+	sg->music = Mix_LoadMUS_RW(rw, 0);	// does this leak?
+	#endif
 
 	img1 = this->render->loadSprite("joshcorp.png", mod);
 	img2 = this->render->loadSprite("sdl.png", mod);
@@ -143,7 +148,11 @@ void Intro::updateUI()
 		this->render->renderSprite(text, x, y);
 	}
 
-	SDL_GL_SwapWindow(this->render->window);
+	#ifdef SDL1_VIDEO
+		SDL_GL_SwapBuffers();
+	#else
+		SDL_GL_SwapWindow(this->render->window);
+	#endif
 
 	CHECK_OPENGL_ERROR
 }

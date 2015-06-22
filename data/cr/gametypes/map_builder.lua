@@ -7,10 +7,21 @@ map_config = ""
 
 -- Mouse pick handler for adding vehicles
 function pickVehicle(coord)
-	prompt_text("Vehicle type", function(type)
-		game.addVehicleXZ(type, coord.x, coord.z)
-		map_config = map_config .. string.format("vehicle {  type = %q  x = %.2f  y = %.2f  }\n", type, coord.x, coord.z)
-	end)
+	typeselect = ui.addDialogListPrompt(
+		"Vehicle type",
+		"Vehicle type",
+		{"Tank", "Ute"},
+		function(typeid)
+			types = {"tank", "ute"};
+			
+			game.addVehicleXZ(types[typeid], coord.x, coord.z)
+			map_config = map_config .. string.format("vehicle {  type = %q  x = %.2f  y = %.2f  }\n", types[typeid], coord.x, coord.z)
+			
+			add_timer(100, function()
+				typeselect:close()
+			end)
+		end
+	)
 end
 
 -- Mouse pick handler for adding objects
@@ -30,15 +41,15 @@ function createToolbar()
 		"Show config",
 		"Close toolbar"
 	}, function(btn)
-		add_timer(500, function()
+		add_timer(100, function()
 			toolbar:close()
 		end)
 
-		if btn == 0 then
+		if btn == 1 then
 			mouse_pick(pickVehicle)
-		elseif btn == 1 then
-			mouse_pick(pickObject)
 		elseif btn == 2 then
+			mouse_pick(pickObject)
+		elseif btn == 3 then
 			local dialog = ui.addDialogTextBox("Map Config")
 			dialog.text = map_config
 		end
@@ -54,4 +65,5 @@ end)
 -- New game; bind M key
 bind_gamestart(function()
 	ui.basicKeyPress("m", createToolbar)
+	weather.disableRandom()
 end)

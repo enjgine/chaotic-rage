@@ -17,7 +17,7 @@
 #include "mod/mod_manager.h"
 #include "mod/gametype.h"
 #include "mod/unittype.h"
-#include "lua/gamelogic.h"
+#include "script/gamelogic.h"
 #include "render/render.h"
 #include "util/ui_update.h"
 #include "http/serverlist.h"
@@ -224,6 +224,7 @@ void GameManager::startGame(MapReg *map, string gametype, string unittype, GameS
 	NetServer* server = NULL;
 	GameType *gt = NULL;
 	Map *m = NULL;
+	UnitType *ut = NULL;
 	st->logic = NULL;
 	st->map = NULL;
 	char* script = NULL;
@@ -240,23 +241,33 @@ void GameManager::startGame(MapReg *map, string gametype, string unittype, GameS
 	// Load map
 	m = new Map(st);
 	if (! m->load(map->getName(), GEng()->render, map->getMod())) {
-		displayMessageBox("Failed to load map");
+		displayMessageBox("Failed to load map: " + map->getName());
 		goto cleanup;
 	}
 	st->map = m;
 
 	// Load gametype
 	gt = GEng()->mm->getGameType(gametype);
-	assert(gt);
+	if (gt == NULL) {
+		displayMessageBox("Failed to load game type: " + gametype);
+		goto cleanup;
+	}
 	st->gt = gt;
 
 	// Set game settings
 	assert(gs);
 	st->gs = gs;
 
+	// Load unit type
+	ut = GEng()->mm->getUnitType(unittype);
+	if (ut == NULL) {
+		displayMessageBox("Failed to load uni type: " + unittype);
+		goto cleanup;
+	}
+
 	// Load and execute lua script
 	new GameLogic(st);
-	st->logic->selected_unittype = GEng()->mm->getUnitType(unittype);
+	st->logic->selected_unittype = ut;
 	script = gt->getLuaScript();
 	if (!script) {
 		displayMessageBox("Failed to load game script");
@@ -299,9 +310,8 @@ void GameManager::networkJoin(string host, UIUpdate *ui)
 	NetGameinfo *gameinfo;
 	MapReg *map;
 	Map *m;
-	NetClient *client;
 
-	client = new NetClient(st);
+	GEng()->client = new NetClient(st);
 	st->logic = NULL;
 	st->map = NULL;
 	st->gs = new GameSettings();
@@ -313,7 +323,7 @@ void GameManager::networkJoin(string host, UIUpdate *ui)
 	st->local_players[0] = new PlayerState(st);
 
 	// Try to join the server
-	gameinfo = client->attemptJoinGame(host, 17778, ui);
+	gameinfo = GEng()->client->attemptJoinGame(host, 17778, ui);
 	if (gameinfo == NULL) {
 		displayMessageBox("Unable to connect to server " + host);
 		goto cleanup;
@@ -339,14 +349,14 @@ void GameManager::networkJoin(string host, UIUpdate *ui)
 
 	// Download the gamestate
 	// When this is done, a final message is sent to tell the server we are done.
-	if (! client->downloadGameState()) {
-		displayMessageBox("Unable to download intial game state from server " + host);
+	if (! GEng()->client->downloadGameState()) {
+		displayMessageBox("Unable to download initial game state from server " + host);
 		//st->postGame();	// TODO: Needed? Crashes
 		goto cleanup;
 	}
 
 	// Begin!
-	st->gameLoop(GEng()->render, GEng()->audio, client);
+	st->gameLoop(GEng()->render, GEng()->audio, GEng()->client);
 
 cleanup:
 	delete st->logic;
@@ -354,5 +364,4 @@ cleanup:
 	delete st->gs;
 	delete st->gt;
 	st->physics->postGame();
-	delete client;
 }

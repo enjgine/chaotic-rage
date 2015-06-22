@@ -3,6 +3,7 @@
 // kate: tab-width 4; indent-width 4; space-indent off; word-wrap off;
 
 #pragma once
+#include <glm/glm.hpp>
 #include "../rage.h"
 
 
@@ -138,6 +139,7 @@ class Render
 
 		/**
 		* Add an animation to the renderer
+		* Any animations left over at game end will be delete()ed
 		**/
 		virtual void addAnimPlay(AnimPlay* play, Entity* e) {}
 
@@ -148,6 +150,7 @@ class Render
 
 		/**
 		* Add a light to the renderer
+		* Any lights left over at game end will be delete()ed
 		**/
 		virtual void addLight(Light* light) {}
 
@@ -155,7 +158,17 @@ class Render
 		* Remove a light from the renderer
 		**/
 		virtual void remLight(Light* light) {}
-		
+
+		/**
+		* Set the state of the torch
+		**/
+		virtual void setTorch(bool on) {}
+
+		/**
+		* Set ambient light
+		**/
+		virtual void setAmbient(glm::vec4 ambient) {}
+
 	public:
 		Render(GameState * st);
 		virtual ~Render() {}

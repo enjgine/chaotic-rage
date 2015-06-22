@@ -4,14 +4,12 @@
 
 #pragma once
 #include <guichan.hpp>
-#include <string>
 #include <vector>
 #include "../rage.h"
+#include "../i18n/gettext.h"
 #include "dialog.h"
 
 class GameState;
-
-using namespace std;
 
 
 /**
@@ -19,16 +17,6 @@ using namespace std;
 **/
 class DialogClientSettings : public Dialog, public gcn::ActionListener
 {
-	private:
-		GameState* st;
-		gcn::Button* button;
-
-		gcn::TextField* gl_msaa;
-		gcn::TextField* gl_tex_filter;
-		gcn::CheckBox* fullscreen;
-		gcn::DropDown* lang;
-		vector<string>* langs;
-
 	public:
 		explicit DialogClientSettings(GameState* st);
 		virtual ~DialogClientSettings();
@@ -38,4 +26,16 @@ class DialogClientSettings : public Dialog, public gcn::ActionListener
 
 		virtual const DialogName getName() { return CLIENT_SETTINGS; }
 		virtual void action(const gcn::ActionEvent& actionEvent);
+
+	private:
+		GameState* st;
+		gcn::Button* button;
+
+		gcn::TextField* gl_msaa;
+		gcn::TextField* gl_tex_filter;
+		gcn::CheckBox* fullscreen;
+		gcn::TextField* width;
+		gcn::TextField* height;
+		gcn::DropDown* lang;
+		std::vector<Lang>* langs;
 };

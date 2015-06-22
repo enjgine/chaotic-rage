@@ -7,8 +7,6 @@
 #include <list>
 #include <vector>
 
-class GameState;
-
 
 /**
 * Windows bits
@@ -29,6 +27,16 @@ class GameState;
 
 	#define snprintf sprintf_s
 #endif
+
+
+/**
+* Emscripten fake SDL2 bits
+**/
+#ifdef __EMSCRIPTEN__
+	#include <SDL.h>
+	SDL_Keycode SDL_GetKeyFromName(const char* name);
+#endif
+
 
 
 /**
@@ -61,6 +69,36 @@ void displayMessageBox(std::string msg);
 
 
 /**
+* Returns an array of names of files and/or directories in a directory
+*
+* Example return value:
+*    <
+*    cr
+*    debug
+*    >
+*
+* Please free the result when you are done.
+*
+* @param int type 0 = all, 1 = directories only, 2 = files only
+**/
+std::vector<std::string> * getDirectoryList(std::string directory, bool base, int type);
+
+
+/**
+* Returns an array of names of system maps
+*
+* Example return value:
+*    <
+*    therlor_valley
+*    debug
+*    >
+*
+* Please free the result when you are done.
+**/
+std::vector<std::string> * getSystemMapNames();
+
+
+/**
 * Returns an array of names of system mods
 *
 * Example return value:
@@ -71,7 +109,7 @@ void displayMessageBox(std::string msg);
 *
 * Please free the result when you are done.
 **/
-std::list<std::string> * getSystemModNames();
+std::vector<std::string> * getSystemModNames();
 
 
 /**

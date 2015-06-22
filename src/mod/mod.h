@@ -6,6 +6,7 @@
 #include <SDL.h>
 #include "../rage.h"
 #include "../map/reg.h"
+#include "../audio/audio.h"
 #include <map>
 
 #ifndef O_BINARY
@@ -28,7 +29,6 @@ class GameType;
 class ObjectType;
 class PickupType;
 class Song;
-class Sound;
 class UnitType;
 class VehicleType;
 class WallType;
@@ -40,10 +40,12 @@ class Mod {
 	private:
 		// metadata
 		string title;
+
+		// menu stuff
 		vector<MapReg> * maps;
 		bool has_arcade;
 		bool has_campaign;
-		string load_err;
+		string menu_model;
 
 		// full data
 		vector<AIType*> * ais;
@@ -52,12 +54,17 @@ class Mod {
 		vector<ObjectType*> * objecttypes;
 		vector<PickupType*> * pickuptypes;
 		vector<Song*> * songs;
-		vector<Sound*> * sounds;
 		vector<UnitType*> * unitclasses;
 		vector<VehicleType*> * vehicletypes;
 		vector<WallType*> * walltypes;
 		vector<WeaponType*> * weapontypes;
+
+		// Caches
 		map<string, AssimpModel*> models;
+		map<string, AudioPtr> sounds;
+
+		// What went wrong
+		string load_err;
 
 	public:
 		GameState * st;
@@ -85,6 +92,7 @@ class Mod {
 		vector<MapReg>* getMaps() { return this->maps; }
 		bool hasArcade() { return this->has_arcade; }
 		bool hasCampaign() { return this->has_campaign; }
+		string getMenuModelName() { return this->menu_model; }
 
 		AIType * getAIType(CRC32 id);
 		ObjectType * getObjectType(CRC32 id);
@@ -100,13 +108,13 @@ class Mod {
 		ObjectType * getObjectType(string name);
 		PickupType * getPickupType(string name);
 		Song * getSong(string name);
-		Sound * getSound(string name);
 		UnitType * getUnitType(string name);
 		VehicleType * getVehicleType(string name);
 		WallType * getWallType(string name);
 		WeaponType * getWeaponType(string name);
 
-		AssimpModel * getAssimpModel(string name);
+		AssimpModel * getAssimpModel(string filename);
+		AudioPtr getSound(string filename);
 
 		vector<Campaign*> * getCampaigns();
 

@@ -7,7 +7,6 @@
 
 class AnimPlay;
 class GameState;
-class Sound;
 class btCollisionShape;
 class btTransform;
 
@@ -24,6 +23,7 @@ class Decaying : public Entity
 
 	public:
 		AnimPlay *anim;
+		unsigned int remove_after;
 
 	private:
 		static btCollisionShape* col_shape;
@@ -32,6 +32,5 @@ class Decaying : public Entity
 		Decaying(GameState *st, const btTransform &xform, AnimPlay *model, float mass = 0.0f);
 		virtual ~Decaying();
 
-		virtual Sound* getSound();
 		virtual void update(int delta);
 };

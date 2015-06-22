@@ -28,6 +28,7 @@ class AmmoRound;
 class GameSettings;
 class AnimPlay;
 class Light;
+class Weather;
 
 namespace gcn {
 	class Gui;
@@ -67,16 +68,6 @@ class PlayerState
 };
 
 
-/**
-* TODO: Remove me
-**/
-class DebugLine
-{
-	public:
-		btVector3 *a;
-		btVector3 *b;
-};
-
 #define FPS_SAMPLES 100
 
 
@@ -105,9 +96,6 @@ class GameState
 		vector<Wall*> walls;		// leaks: items are not removed
 
 		bool running;
-		unsigned int entropy;		// TODO: gamestate -> localplayers
-
-		list<DebugLine*>lines;
 
 		EID eid_next;
 
@@ -127,8 +115,11 @@ class GameState
 		PhysicsBullet* physics;
 
 		SPK::System* particle_system;
-		SPK::Renderer* particle_renderer;
+		Weather* weather;
 
+		float time_of_day;			// 0.0 = midnight, 1.0 = midday
+		float time_cycle;
+		
 	public:
 		GameState();
 		~GameState();
@@ -142,6 +133,7 @@ class GameState
 		void addPickup(Pickup* pickup);
 		void addAmmoRound(AmmoRound* e);
 		void addParticleGroup(SPK::Group* group);
+		void removeParticleGroup(SPK::Group* group);
 
 		// Add and remove animations from the renderer
 		// This just wraps the render code
@@ -152,6 +144,7 @@ class GameState
 		// This just wraps the render code
 		void addLight(Light* light);
 		void remLight(Light* light);
+		void setTorch(bool on);
 
 		// Debris
 		Entity* deadButNotBuried(Entity* e, AnimPlay* play);
@@ -164,8 +157,11 @@ class GameState
 		// Data queries
 		list<UnitQueryResult> * findVisibleUnits(Unit* origin);
 		Unit * findUnitSlot(unsigned int slot);
-		PlayerState * localPlayerFromSlot(unsigned int slot);
 		list<AmmoRound*>* findAmmoRoundsUnit(Unit* u);
+
+		// Get the PlayerState or NULL
+		PlayerState* getLocalPlayer(const Player* p);
+		PlayerState* getLocalPlayer(unsigned int slot);
 
 		// Start and run
 		void preGame();
@@ -176,31 +172,25 @@ class GameState
 		* The main game loop
 		**/
 		void gameLoop(Render* render, Audio* audio, NetClient* client);
+		void gameLoopIter();
+		static void gameLoopIterEmscripten(void* arg);
 
 		// Called by Lua, etc
-		void gameOver();
-		void gameOver(int result);
+		void gameOver(int result = -1);
 		int getLastGameResult();
 
 		// Weapon fun
 		vector<WeaponType*>* getSpawnWeapons(UnitType* ut, Faction fac);
 
-		// Entropy
-		unsigned int getEntropy(unsigned int slot);
-		void increaseEntropy(unsigned int slot);
-
 		// HUD
-		void addHUDMessage(unsigned int slot, string text);
-		void addHUDMessage(unsigned int slot, string text, string text2);
-		HUDLabel* addHUDLabel(unsigned int slot, float x, float y, string data);
+		void addHUDMessage(unsigned int slot, string text, string text2 = "");
+		HUDLabel* addHUDLabel(unsigned int slot, int x, int y, string data, HUDLabel* l = NULL);
 		bool mousePick(unsigned int x, unsigned int y, btVector3& hitLocation, Entity** hitEntity);
 
-		// Debugging
-		void addDebugLine(btVector3 * a, btVector3 * b);
-		void addDebugPoint(float x, float y, float z);
-		void addDebugPoint(float x, float y, float z, float len);
+	private:
+		void doTimeOfDay(float delta);
+		void doTorch();
 };
 
 
 GameState * getGameState();
-

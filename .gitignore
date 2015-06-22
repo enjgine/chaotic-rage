@@ -10,3 +10,7 @@
 multipound*.log
 gmon.out
 callgrind.out*
+cov-int
+
+.*
+!.gitignore

@@ -4,27 +4,52 @@
 
 #include "npc.h"
 #include "../game_state.h"
-#include "../lua/ailogic.h"
-#include "../lua/gamelogic.h"
+#include "../script/ailogic.h"
+#include "../script/gamelogic.h"
 #include "../mod/aitype.h"
 #include "../rage.h"
 #include "unit.h"
 
 class UnitType;
 
-
 using namespace std;
 
 
-NPC::NPC(UnitType *uc, GameState *st, float x, float y, float z, AIType *ai, Faction fac) : Unit(uc, st, x, y, z, fac)
+/**
+* Spawn npc using map X/Z coords
+**/
+NPC::NPC(UnitType *uc, GameState *st, Faction fac, AIType *ai, float x, float z) : Unit(uc, st, fac, x, z)
 {
 	vals[0] = vals[1] = vals[2] = vals[3] = 0;
 
 	this->logic = new AILogic(this);
 	this->logic->execScript(ai->script);
-
-	this->idle_sound_time = st->game_time + 15000;
 }
+
+
+/**
+* Spawn npc using X/Y/Z coords
+**/
+NPC::NPC(UnitType *uc, GameState *st, Faction fac, AIType *ai, float x, float y, float z) : Unit(uc, st, fac, x, y, z)
+{
+	vals[0] = vals[1] = vals[2] = vals[3] = 0;
+
+	this->logic = new AILogic(this);
+	this->logic->execScript(ai->script);
+}
+
+
+/**
+* Spawn npc using specific coordinates
+**/
+NPC::NPC(UnitType *uc, GameState *st, Faction fac, AIType *ai, btTransform & loc) : Unit(uc, st, fac, loc)
+{
+	vals[0] = vals[1] = vals[2] = vals[3] = 0;
+
+	this->logic = new AILogic(this);
+	this->logic->execScript(ai->script);
+}
+
 
 NPC::~NPC()
 {
@@ -38,31 +63,18 @@ NPC::~NPC()
 **/
 void NPC::update(int delta)
 {
-	if (remove_at != 0) {
-		if (remove_at <= st->game_time) this->del = 1;
-		return;
-	}
-
 	logic->update();
 	Unit::update(delta);
-
-	if (this->idle_sound_time < st->game_time) {
-		// TODO: play idle sound
-		this->idle_sound_time = st->game_time + 15000;
-	}
 }
 
-int NPC::takeDamage(float damage)
+
+/**
+* The npc has died
+**/
+void NPC::die()
 {
-	int result = Unit::takeDamage(damage);
+	this->st->logic->raise_npcdied();
 
-	if (result == 1) {
-		this->st->logic->raise_npcdied();
-
-		// TODO: play death sound
-
-		this->st->deadButNotBuried(this, this->anim);
-	}
-
-	return result;
+	Unit::die();
 }
+
